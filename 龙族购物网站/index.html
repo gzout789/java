@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>龙族 · 卡塞尔装备库</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&family=Noto+Serif+SC:wght@400;600;700&family=Oswald:wght@500;700&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --ink: #0a0a0c;
+    --ink-2: #121216;
+    --panel: rgba(22, 20, 26, 0.74);
+    --blood: #c0392b;
+    --blood-2: #7e160f;
+    --gold: #d6b25a;
+    --gold-2: #a07d2c;
+    --gold-soft: #ecd9a0;
+    --jade: #4fa89a;
+    --text: #ece6da;
+    --text-dim: #9a9488;
+    --line: rgba(214, 178, 90, 0.26);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    font-family: "Noto Serif SC", "Songti SC", "STSong", serif;
+    color: var(--text);
+    background:
+      radial-gradient(120% 80% at 50% -12%, rgba(192, 57, 43, 0.20), transparent 58%),
+      radial-gradient(90% 60% at 88% 8%, rgba(214, 178, 90, 0.12), transparent 55%),
+      linear-gradient(180deg, #0a0a0c 0%, #141218 42%, #08080a 100%);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+  /* drifting embers / dragon-breath */
+  .embers { position: fixed; inset: 0; pointer-events: none; z-index: 0; }
+  .embers i {
+    position: absolute; bottom: -10px; width: 3px; height: 3px; border-radius: 50%;
+    background: radial-gradient(circle, #e0b35a, rgba(192,57,43,0)); opacity: .8;
+    animation: rise linear infinite;
+  }
+  @keyframes rise {
+    to { transform: translateY(-110vh) translateX(40px); opacity: 0; }
+  }
+
+  a { color: inherit; text-decoration: none; }
+
+  /* NAV */
+  header.nav {
+    position: sticky; top: 0; z-index: 30;
+    backdrop-filter: blur(10px);
+    background: linear-gradient(180deg, rgba(10,10,12,0.94), rgba(10,10,12,0.6));
+    border-bottom: 1px solid var(--line);
+  }
+  .nav-inner { max-width: 1180px; margin: 0 auto; padding: 14px 22px; display: flex; align-items: center; gap: 18px; }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .brand .seal {
+    width: 46px; height: 46px; border-radius: 9px;
+    background: linear-gradient(135deg, var(--blood), var(--blood-2));
+    border: 1.5px solid var(--gold);
+    display: grid; place-items: center; transform: rotate(-3deg);
+    box-shadow: 0 0 18px rgba(192,57,43,0.45);
+  }
+  .brand .seal svg { width: 30px; height: 30px; }
+  .brand b { font-family: "Ma Shan Zheng", serif; font-size: 27px; letter-spacing: 4px; color: var(--gold-soft); text-shadow: 0 2px 8px rgba(0,0,0,.6); }
+  .brand small { font-family: "Oswald", sans-serif; letter-spacing: 3px; color: var(--text-dim); font-size: 11px; display: block; margin-top: -2px; }
+  .nav-spacer { flex: 1; }
+  .search {
+    display: flex; align-items: center; gap: 8px; background: rgba(0,0,0,.4);
+    border: 1px solid var(--line); border-radius: 999px; padding: 8px 16px; min-width: 220px;
+  }
+  .search input { background: transparent; border: none; outline: none; color: var(--text); font-family: inherit; font-size: 15px; width: 100%; }
+  .search input::placeholder { color: var(--text-dim); }
+  .search svg { width: 18px; height: 18px; flex: none; }
+  .cart-btn {
+    position: relative; cursor: pointer; display: flex; align-items: center; gap: 8px;
+    background: linear-gradient(135deg, var(--gold), var(--gold-2)); color: #271c06; font-weight: 700; font-family: inherit;
+    border: none; border-radius: 999px; padding: 10px 18px; font-size: 15px;
+    box-shadow: 0 0 16px rgba(214,178,90,.35); transition: transform .15s ease, box-shadow .15s ease;
+  }
+  .cart-btn:hover { transform: translateY(-1px); box-shadow: 0 0 24px rgba(214,178,90,.55); }
+  .cart-btn svg { width: 20px; height: 20px; }
+  .cart-badge {
+    position: absolute; top: -8px; right: -8px; background: var(--blood); color: #fff; font-size: 12px; font-weight: 700;
+    min-width: 22px; height: 22px; border-radius: 999px; display: grid; place-items: center; padding: 0 6px; border: 2px solid var(--ink);
+  }
+
+  /* HERO */
+  .hero { position: relative; z-index: 1; max-width: 1180px; margin: 0 auto; padding: 54px 22px 22px; display: flex; align-items: center; gap: 34px; flex-wrap: wrap; }
+  .hero-text { flex: 1 1 400px; }
+  .hero h1 { font-family: "Ma Shan Zheng", serif; font-size: 76px; line-height: 1; color: var(--gold-soft); letter-spacing: 8px; text-shadow: 0 4px 26px rgba(192,57,43,.4); }
+  .hero .en { font-family: "Oswald", sans-serif; letter-spacing: 6px; color: var(--blood); font-size: 14px; margin-top: 6px; }
+  .hero blockquote { margin-top: 18px; border-left: 3px solid var(--blood); padding-left: 16px; color: var(--text-dim); font-size: 16px; line-height: 1.9; font-style: italic; }
+  .hero blockquote span { color: var(--gold-soft); font-style: normal; }
+  .hero .coa { margin-top: 24px; display: inline-flex; gap: 12px; flex-wrap: wrap; }
+  .hero .coa button { font-family: inherit; cursor: pointer; font-size: 15px; padding: 12px 22px; border-radius: 999px; border: 1px solid var(--gold); background: transparent; color: var(--gold-soft); transition: all .18s ease; }
+  .hero .coa button.primary { background: linear-gradient(135deg, var(--blood), var(--blood-2)); color: #fff; border-color: var(--blood); box-shadow: 0 0 18px rgba(192,57,43,.45); }
+  .hero .coa button:hover { transform: translateY(-2px); }
+  .hero-art { flex: 1 1 300px; display: grid; place-items: center; }
+  .hero-art svg { width: 280px; height: 280px; filter: drop-shadow(0 0 30px rgba(192,57,43,.45)); }
+
+  /* CATEGORY */
+  .cats { position: relative; z-index: 1; max-width: 1180px; margin: 6px auto 0; padding: 0 22px; }
+  .cats-wrap { display: flex; gap: 12px; flex-wrap: wrap; }
+  .cat { cursor: pointer; font-family: inherit; font-size: 15px; color: var(--text-dim); border: 1px solid var(--line); background: rgba(0,0,0,.25); padding: 9px 20px; border-radius: 999px; transition: all .18s ease; }
+  .cat:hover { color: var(--gold-soft); border-color: var(--gold); }
+  .cat.active { color: #271c06; background: linear-gradient(135deg, var(--gold), var(--gold-2)); border-color: var(--gold); font-weight: 700; }
+
+  /* GRID */
+  .shop { position: relative; z-index: 1; max-width: 1180px; margin: 26px auto 60px; padding: 0 22px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 22px; }
+  .card { position: relative; background: var(--panel); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; padding: 18px; backdrop-filter: blur(6px); transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease; animation: rise .5s ease both; }
+  @keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+  .card:hover { transform: translateY(-6px); border-color: var(--gold); box-shadow: 0 14px 40px rgba(0,0,0,.55), 0 0 22px rgba(192,57,43,.22); }
+  .card .corner { position: absolute; top: 10px; right: 12px; font-size: 12px; color: var(--gold); opacity: .85; font-family: "Oswald", sans-serif; letter-spacing: 1px; }
+  .thumb { height: 150px; display: grid; place-items: center; margin-bottom: 14px; background: radial-gradient(circle at 50% 40%, rgba(192,57,43,.14), transparent 70%); border-radius: 12px; }
+  .thumb svg { width: 108px; height: 108px; }
+  .card h3 { font-size: 19px; color: var(--gold-soft); letter-spacing: 1px; }
+  .card .tag { display: inline-block; margin-top: 8px; font-size: 12px; color: var(--jade); border: 1px solid rgba(79,168,154,.4); border-radius: 999px; padding: 2px 10px; }
+  .card .desc { margin-top: 10px; color: var(--text-dim); font-size: 13px; line-height: 1.6; min-height: 40px; }
+  .card .row { margin-top: 14px; display: flex; align-items: center; justify-content: space-between; }
+  .price { font-size: 20px; color: var(--blood); font-weight: 700; }
+  .price small { color: var(--text-dim); font-size: 12px; font-weight: 400; }
+  .add { cursor: pointer; font-family: inherit; font-size: 14px; color: #271c06; font-weight: 700; background: linear-gradient(135deg, var(--gold), var(--gold-2)); border: none; border-radius: 10px; padding: 9px 16px; transition: transform .15s ease, box-shadow .15s ease; }
+  .add:hover { transform: translateY(-2px); box-shadow: 0 0 16px rgba(214,178,90,.5); }
+  .empty { grid-column: 1/-1; text-align: center; color: var(--text-dim); padding: 60px 0; }
+
+  /* CART DRAWER */
+  .scrim { position: fixed; inset: 0; background: rgba(0,0,0,.62); z-index: 40; opacity: 0; pointer-events: none; transition: opacity .25s ease; }
+  .scrim.show { opacity: 1; pointer-events: auto; }
+  .drawer { position: fixed; top: 0; right: 0; height: 100%; width: 380px; max-width: 90vw; z-index: 50; background: linear-gradient(180deg, #16131a, #0a0a0c); border-left: 1px solid var(--gold); transform: translateX(100%); transition: transform .3s ease; display: flex; flex-direction: column; }
+  .drawer.show { transform: none; }
+  .drawer h2 { font-family: "Ma Shan Zheng", serif; font-size: 26px; color: var(--gold-soft); letter-spacing: 3px; padding: 20px 22px; border-bottom: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; }
+  .drawer h2 .close { cursor: pointer; color: var(--text-dim); font-size: 22px; background: none; border: none; }
+  .items { flex: 1; overflow-y: auto; padding: 10px 18px; }
+  .item { display: flex; gap: 12px; align-items: center; padding: 12px 0; border-bottom: 1px dashed var(--line); }
+  .item .ic { width: 44px; height: 44px; flex: none; display: grid; place-items: center; background: rgba(192,57,43,.12); border-radius: 10px; }
+  .item .ic svg { width: 30px; height: 30px; }
+  .item .meta { flex: 1; min-width: 0; }
+  .item .meta b { color: var(--gold-soft); font-size: 15px; }
+  .item .meta .p { color: var(--blood); font-size: 13px; }
+  .stepper { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+  .stepper button { width: 24px; height: 24px; border-radius: 6px; border: 1px solid var(--line); background: transparent; color: var(--gold-soft); cursor: pointer; font-size: 15px; }
+  .stepper span { min-width: 18px; text-align: center; color: var(--text); }
+  .item .del { background: none; border: none; color: var(--text-dim); cursor: pointer; font-size: 18px; }
+  .drawer .foot { padding: 18px 22px; border-top: 1px solid var(--line); }
+  .drawer .total { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 14px; }
+  .drawer .total b { font-size: 24px; color: var(--gold-soft); }
+  .checkout { width: 100%; cursor: pointer; font-family: inherit; font-size: 17px; font-weight: 700; color: #fff; background: linear-gradient(135deg, var(--blood), var(--blood-2)); border: 1px solid var(--blood); border-radius: 12px; padding: 14px; box-shadow: 0 0 18px rgba(192,57,43,.4); transition: transform .15s ease; }
+  .checkout:hover { transform: translateY(-2px); }
+  .cart-empty { text-align: center; color: var(--text-dim); padding: 60px 20px; }
+
+  /* TOAST */
+  .toast { position: fixed; left: 50%; bottom: 40px; translate: -50% 20px; background: linear-gradient(135deg, var(--blood), var(--blood-2)); color: #fff; padding: 14px 28px; border-radius: 999px; font-size: 16px; z-index: 60; box-shadow: 0 8px 30px rgba(0,0,0,.5); opacity: 0; pointer-events: none; transition: opacity .3s ease, translate .3s ease; border: 1px solid var(--gold); }
+  .toast.show { opacity: 1; translate: -50% 0; }
+
+  footer { position: relative; z-index: 1; text-align: center; color: var(--text-dim); font-size: 13px; padding: 24px; border-top: 1px solid var(--line); }
+
+  @media (max-width: 620px) {
+    .hero h1 { font-size: 52px; }
+    .search { min-width: 150px; }
+    .nav-inner { flex-wrap: wrap; }
+  }
+</style>
+</head>
+<body>
+  <div class="embers" id="embers"></div>
+
+  <header class="nav">
+    <div class="nav-inner">
+      <div class="brand">
+        <div class="seal" title="卡塞尔学院印记">
+          <svg viewBox="0 0 100 100" fill="none">
+            <path d="M50 8 L86 22 V52 C86 74 70 88 50 94 C30 88 14 74 14 52 V22 Z" stroke="#ecd9a0" stroke-width="4" fill="#7e160f"/>
+            <path d="M50 28 C40 38 40 52 50 62 C60 52 60 38 50 28 Z" fill="#ecd9a0"/>
+            <circle cx="50" cy="68" r="6" fill="#ecd9a0"/>
+          </svg>
+        </div>
+        <div>
+          <b>龙族</b>
+          <small>CASSELL · SUPPLY</small>
+        </div>
+      </div>
+      <div class="nav-spacer"></div>
+      <label class="search">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#9a9488" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
+        <input id="search" type="text" placeholder="搜罗屠龙装备…" />
+      </label>
+      <button class="cart-btn" id="cartBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#271c06" stroke-width="2"><path d="M3 4h2l2.4 12.5a2 2 0 0 0 2 1.5h8.2a2 2 0 0 0 2-1.6L23 8H6"/><circle cx="10" cy="21" r="1.5"/><circle cx="19" cy="21" r="1.5"/></svg>
+        宝匣
+        <span class="cart-badge" id="badge" style="display:none">0</span>
+      </button>
+    </div>
+  </header>
+
+  <section class="hero">
+    <div class="hero-text">
+      <h1>龙族</h1>
+      <div class="en">CASSELL COLLEGE · DRAGON SLAYER SUPPLY</div>
+      <blockquote>
+        我重临世界之日，诸逆臣皆当死去。<br/>
+        <span>—— 献给每一个等待屠龙的衰小孩。</span>
+      </blockquote>
+      <div class="coa">
+        <button class="primary" id="goShop">入 学 报 到</button>
+        <button id="goCart2">我的宝匣</button>
+      </div>
+    </div>
+    <div class="hero-art">
+      <svg viewBox="0 0 200 200" fill="none">
+        <defs>
+          <radialGradient id="orb" cx="50%" cy="40%" r="60%">
+            <stop offset="0%" stop-color="#fff3cf"/>
+            <stop offset="45%" stop-color="#d6b25a"/>
+            <stop offset="100%" stop-color="#a07d2c"/>
+          </radialGradient>
+        </defs>
+        <!-- shield crest -->
+        <path d="M100 12 L168 36 V96 C168 138 138 166 100 180 C62 166 32 138 32 96 V36 Z" stroke="#d6b25a" stroke-width="4" fill="rgba(126,22,15,0.35)"/>
+        <!-- coiled dragon -->
+        <path d="M70 130 C50 100 78 84 96 100 C118 122 78 150 108 140 C140 130 140 96 116 84"
+              stroke="#d6b25a" stroke-width="8" stroke-linecap="round" fill="none" opacity="0.92"/>
+        <path d="M138 72 C128 58 146 50 158 58 C166 63 166 76 156 80 C144 84 140 80 138 72 Z" fill="#c0392b" stroke="#ecd9a0" stroke-width="2"/>
+        <circle cx="152" cy="66" r="3" fill="#0a0a0c"/>
+        <!-- blood orb -->
+        <circle cx="100" cy="104" r="30" fill="url(#orb)"/>
+        <circle cx="100" cy="104" r="30" stroke="#ecd9a0" stroke-width="2"/>
+        <circle cx="90" cy="94" r="8" fill="#fff7e0" opacity="0.7"/>
+      </svg>
+    </div>
+  </section>
+
+  <div class="cats">
+    <div class="cats-wrap" id="cats">
+      <button class="cat active" data-cat="all">全部</button>
+      <button class="cat" data-cat="书籍">书籍</button>
+      <button class="cat" data-cat="武器">武器</button>
+      <button class="cat" data-cat="手办">手办</button>
+      <button class="cat" data-cat="配饰">配饰</button>
+      <button class="cat" data-cat="服饰">服饰</button>
+      <button class="cat" data-cat="收藏">收藏</button>
+    </div>
+  </div>
+
+  <main class="shop">
+    <div class="grid" id="grid"></div>
+  </main>
+
+  <footer>龙族 · 卡塞尔装备库 — 江南《龙族》同人周边演示站，商品与价格均为虚构</footer>
+
+  <!-- CART -->
+  <div class="scrim" id="scrim"></div>
+  <aside class="drawer" id="drawer">
+    <h2>我的宝匣 <button class="close" id="closeCart">×</button></h2>
+    <div class="items" id="items"></div>
+    <div class="foot">
+      <div class="total"><span>合计灵石</span><b id="total">0</b></div>
+      <button class="checkout" id="checkout">结 算 入 帐</button>
+    </div>
+  </aside>
+
+  <div class="toast" id="toast"></div>
+
+<script>
+  // ---- Product data (江南《龙族》同人周边) ----
+  const ICONS = {
+    book: '<svg viewBox="0 0 100 100" fill="none" stroke="#d6b25a" stroke-width="3"><rect x="20" y="24" width="34" height="52" rx="3" fill="rgba(192,57,43,.25)"/><rect x="46" y="24" width="34" height="52" rx="3" fill="rgba(214,178,90,.18)"/><line x1="37" y1="24" x2="37" y2="76" stroke="#ecd9a0"/><line x1="63" y1="24" x2="63" y2="76" stroke="#ecd9a0"/></svg>',
+    letter: '<svg viewBox="0 0 100 100" fill="none" stroke="#d6b25a" stroke-width="3"><rect x="18" y="28" width="64" height="44" rx="3" fill="rgba(192,57,43,.22)"/><path d="M18 30 L50 54 L82 30" stroke="#ecd9a0"/><circle cx="50" cy="50" r="6" fill="#c0392b" stroke="none"/></svg>',
+    note: '<svg viewBox="0 0 100 100" fill="none" stroke="#d6b25a" stroke-width="3"><rect x="26" y="20" width="48" height="60" rx="4" fill="rgba(214,178,90,.14)"/><line x1="34" y1="36" x2="66" y2="36"/><line x1="34" y1="48" x2="66" y2="48"/><line x1="34" y1="60" x2="58" y2="60"/></svg>',
+    blade: '<svg viewBox="0 0 100 100" fill="none"><path d="M50 14 L58 64 L50 74 L42 64 Z" fill="#d6b25a" stroke="#ecd9a0" stroke-width="1.5"/><line x1="34" y1="66" x2="66" y2="66" stroke="#a07d2c" stroke-width="5"/><rect x="45" y="66" width="10" height="20" rx="2" fill="#c0392b"/></svg>',
+    figure: '<svg viewBox="0 0 100 100" fill="none" stroke="#d6b25a" stroke-width="3"><circle cx="50" cy="30" r="10" fill="rgba(192,57,43,.3)"/><path d="M50 40 C36 50 36 72 50 86 C64 72 64 50 50 40 Z" fill="rgba(214,178,90,.18)"/><path d="M40 18 L34 10 M60 18 L66 10" stroke="#ecd9a0"/></svg>',
+    badge: '<svg viewBox="0 0 100 100" fill="none" stroke="#d6b25a" stroke-width="3"><path d="M50 14 L80 26 V52 C80 70 66 82 50 88 C34 82 20 70 20 52 V26 Z" fill="rgba(192,57,43,.28)"/><path d="M50 34 C42 42 42 54 50 62 C58 54 58 42 50 34 Z" fill="#ecd9a0" stroke="none"/></svg>',
+    clip: '<svg viewBox="0 0 100 100" fill="none" stroke="#d6b25a" stroke-width="3"><path d="M30 70 C30 40 70 40 70 70" fill="none"/><rect x="26" y="64" width="12" height="22" rx="3" fill="rgba(192,57,43,.3)"/><circle cx="68" cy="40" r="6" fill="#c0392b" stroke="none"/></svg>',
+    suit: '<svg viewBox="0 0 100 100" fill="none" stroke="#d6b25a" stroke-width="3"><path d="M34 22 L50 40 L66 22 L74 30 L60 56 L60 84 L40 84 L40 56 L26 30 Z" fill="rgba(214,178,90,.16)"/><line x1="50" y1="40" x2="50" y2="84" stroke="#ecd9a0"/></svg>',
+    medal: '<svg viewBox="0 0 100 100" fill="none" stroke="#d6b25a" stroke-width="3"><circle cx="50" cy="56" r="26" fill="rgba(192,57,43,.28)"/><path d="M40 22 L50 50 L60 22" fill="rgba(214,178,90,.2)"/><path d="M50 44 C44 50 44 60 50 66 C56 60 56 50 50 44 Z" fill="#ecd9a0" stroke="none"/></svg>'
+  };
+
+  const PRODUCTS = [
+    { id: 1, name: "《龙族》正传 1-5 册 精装典藏", cat: "书籍", price: 398, desc: "江南著。衰小孩路明非的屠龙纪事，全套收藏。", icon: "book" },
+    { id: 2, name: "卡塞尔学院·录取通知书", cat: "收藏", price: 128, desc: "复刻版入学凭证，烫金纹章，编号限量。", icon: "letter" },
+    { id: 3, name: "言灵秘典·手写笔记复刻", cat: "书籍", price: 168, desc: "收录君焰、镰鼬、审判等言灵释义。", icon: "note" },
+    { id: 4, name: "村雨·高碳钢战术刀模型", cat: "武器", price: 880, desc: "楚子航同款，未沾血亦鸣的妖刀。", icon: "blade" },
+    { id: 5, name: "青铜与火之王·诺顿 手办", cat: "手办", price: 599, desc: "四大君主之一，龙鳞与烈焰细节还原。", icon: "figure" },
+    { id: 6, name: "混血种身份徽章·狮心会", cat: "配饰", price: 88, desc: "卡塞尔狮心会制式，暗金龙纹。", icon: "badge" },
+    { id: 7, name: "诺诺同款·赤焰发夹", cat: "配饰", price: 66, desc: "陈墨瞳的红，烈火般张扬。", icon: "clip" },
+    { id: 8, name: "恺撒·加图索定制西装礼盒", cat: "服饰", price: 2680, desc: "学生会主席的排场，绅士与霸气并存。", icon: "suit" },
+    { id: 9, name: "自由一日·纪念勋章", cat: "收藏", price: 158, desc: "卡塞尔年度盛事限定，纪念每一次叛逆。", icon: "medal" },
+    { id: 10, name: "白王·天照 限定手办", cat: "手办", price: 1299, desc: "高高在上的白帝，神性与寂灭之姿。", icon: "figure" }
+  ];
+
+  let cart = {};
+  let activeCat = "all";
+  let keyword = "";
+
+  const grid = document.getElementById('grid');
+  const badge = document.getElementById('badge');
+  const itemsEl = document.getElementById('items');
+  const totalEl = document.getElementById('total');
+  const toastEl = document.getElementById('toast');
+
+  function fmt(n){ return n.toLocaleString('zh-CN'); }
+
+  function renderGrid(){
+    const list = PRODUCTS.filter(p =>
+      (activeCat === 'all' || p.cat === activeCat) &&
+      (keyword === '' || p.name.includes(keyword) || p.desc.includes(keyword) || p.cat.includes(keyword))
+    );
+    if (list.length === 0){
+      grid.innerHTML = '<div class="empty">未寻得匹配的装备，换个词试试？</div>';
+      return;
+    }
+    grid.innerHTML = list.map((p, i) => `
+      <div class="card" style="animation-delay:${i*0.04}s">
+        <div class="corner">${p.cat}</div>
+        <div class="thumb">${ICONS[p.icon]}</div>
+        <h3>${p.name}</h3>
+        <span class="tag">${p.cat}</span>
+        <div class="desc">${p.desc}</div>
+        <div class="row">
+          <div class="price">${fmt(p.price)} <small>灵石</small></div>
+          <button class="add" data-id="${p.id}">加入宝匣</button>
+        </div>
+      </div>`).join('');
+    grid.querySelectorAll('.add').forEach(b => b.addEventListener('click', () => addToCart(+b.dataset.id)));
+  }
+
+  function addToCart(id){
+    cart[id] = (cart[id] || 0) + 1;
+    updateBadge();
+    const p = PRODUCTS.find(x => x.id === id);
+    showToast(`已将「${p.name}」收入宝匣`);
+  }
+
+  function changeQty(id, d){
+    cart[id] = (cart[id] || 0) + d;
+    if (cart[id] <= 0) delete cart[id];
+    updateBadge(); renderCart();
+  }
+  function removeItem(id){ delete cart[id]; updateBadge(); renderCart(); }
+
+  function updateBadge(){
+    const count = Object.values(cart).reduce((a,b)=>a+b,0);
+    if (count > 0){ badge.style.display = 'grid'; badge.textContent = count; }
+    else badge.style.display = 'none';
+  }
+
+  function renderCart(){
+    const ids = Object.keys(cart);
+    if (ids.length === 0){
+      itemsEl.innerHTML = '<div class="cart-empty">宝匣空空，快去诺顿馆寻宝吧～</div>';
+      totalEl.textContent = '0';
+      return;
+    }
+    let total = 0;
+    itemsEl.innerHTML = ids.map(id => {
+      const p = PRODUCTS.find(x => x.id === +id);
+      const qty = cart[id]; total += p.price * qty;
+      return `<div class="item">
+        <div class="ic">${ICONS[p.icon]}</div>
+        <div class="meta">
+          <b>${p.name}</b>
+          <div class="p">${fmt(p.price)} 灵石</div>
+          <div class="stepper">
+            <button data-dec="${p.id}">−</button>
+            <span>${qty}</span>
+            <button data-inc="${p.id}">+</button>
+          </div>
+        </div>
+        <button class="del" data-del="${p.id}">🗑</button>
+      </div>`;
+    }).join('');
+    totalEl.textContent = fmt(total);
+    itemsEl.querySelectorAll('[data-inc]').forEach(b => b.addEventListener('click', () => changeQty(+b.dataset.inc, 1)));
+    itemsEl.querySelectorAll('[data-dec]').forEach(b => b.addEventListener('click', () => changeQty(+b.dataset.dec, -1)));
+    itemsEl.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', () => removeItem(+b.dataset.del)));
+  }
+
+  function showToast(msg){
+    toastEl.textContent = msg;
+    toastEl.classList.add('show');
+    clearTimeout(showToast._t);
+    showToast._t = setTimeout(() => toastEl.classList.remove('show'), 1800);
+  }
+
+  const drawer = document.getElementById('drawer');
+  const scrim = document.getElementById('scrim');
+  function openCart(){ renderCart(); drawer.classList.add('show'); scrim.classList.add('show'); }
+  function closeCart(){ drawer.classList.remove('show'); scrim.classList.remove('show'); }
+  document.getElementById('cartBtn').addEventListener('click', openCart);
+  document.getElementById('goCart2').addEventListener('click', openCart);
+  document.getElementById('closeCart').addEventListener('click', closeCart);
+  scrim.addEventListener('click', closeCart);
+  document.getElementById('goShop').addEventListener('click', () => document.querySelector('.shop').scrollIntoView({behavior:'smooth'}));
+
+  document.getElementById('checkout').addEventListener('click', () => {
+    const count = Object.values(cart).reduce((a,b)=>a+b,0);
+    if (count === 0){ showToast('宝匣为空，先去选宝吧'); return; }
+    const total = Object.keys(cart).reduce((s,id)=> s + PRODUCTS.find(x=>x.id===+id).price*cart[id], 0);
+    cart = {}; updateBadge(); renderCart(); closeCart();
+    showToast(`结算 ${count} 件 · 共 ${fmt(total)} 灵石，已入帐！`);
+  });
+
+  document.getElementById('cats').addEventListener('click', e => {
+    const btn = e.target.closest('.cat'); if (!btn) return;
+    document.querySelectorAll('.cat').forEach(c => c.classList.remove('active'));
+    btn.classList.add('active'); activeCat = btn.dataset.cat; renderGrid();
+  });
+
+  document.getElementById('search').addEventListener('input', e => { keyword = e.target.value.trim(); renderGrid(); });
+
+  // embers
+  (function(){
+    const box = document.getElementById('embers');
+    for (let i = 0; i < 28; i++){
+      const e = document.createElement('i');
+      e.style.left = Math.random() * 100 + 'vw';
+      e.style.animationDuration = (6 + Math.random() * 8) + 's';
+      e.style.animationDelay = (-Math.random() * 12) + 's';
+      e.style.opacity = (0.3 + Math.random() * 0.6).toFixed(2);
+      box.appendChild(e);
+    }
+  })();
+
+  renderGrid(); updateBadge();
+</script>
+</body>
+</html>
