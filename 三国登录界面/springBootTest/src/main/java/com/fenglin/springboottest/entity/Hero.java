@@ -44,4 +44,21 @@ public class Hero {
     /** 排序 */
     @TableField("sort_order")
     private Integer sortOrder;
+
+    /* ==================== 烽烟三国杀 ==================== */
+
+    /** 体力上限（勾玉数），游戏用，建议 3 - 5；汉主坐朝时 +1 */
+    private Integer hp;
+
+    /** 武将技名称，如「武圣」 */
+    @TableField("skill_name")
+    private String skillName;
+
+    /** 武将技类型：常策 / 奇谋 / 应策 / 秘计 */
+    @TableField("skill_type")
+    private String skillType;
+
+    /** 武将技效果描述 */
+    @TableField("skill_desc")
+    private String skillDesc;
 }

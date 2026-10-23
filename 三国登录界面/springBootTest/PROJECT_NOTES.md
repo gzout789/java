@@ -97,4 +97,55 @@ src/main/resources/
 验证结果（2026-10-23）：登录、注册、stats、heroes(+meta)、tasks、news、search 全部 200；
 无 token 访问返回 401；前端代理链路通过；无头 Chrome 自动登录截图正常（截图在 `vue\.shots\`）。
 
-—— 最后更新：2026-10-23
+## 2026-10-23 第二次启动（当前为 Administrator 本机环境）实测
+
+- 本机与上文记录的 `C:\Users\user` 环境不同，以下为本次实测事实：
+  - Java：Zulu **OpenJDK 21.0.10**（`JAVA_HOME=C:\Program Files\Zulu\zulu-21\`）
+  - Maven：PATH 无 mvn；IDEA 内置 Maven 在
+    `D:\IntelliJ IDEA 2024.3.2.2\plugins\maven\lib\maven3`（classworlds 为 `plexus-classworlds-2.8.0.jar`）
+  - **该 maven3 的 bash `mvn` 脚本在本机不可用**（报 `找不到或无法加载主类 ...Launcher`），必须用 java 直调：
+    `java -cp "<maven3>\boot\plexus-classworlds-2.8.0.jar" -Dclassworlds.conf=<maven3>\bin\m2.conf -Dmaven.home=<maven3> -Dmaven.multiModuleProjectDirectory=<项目路径> org.codehaus.plexus.classworlds.launcher.Launcher -B -DskipTests package`
+  - npm：`registry.npmmirror.com` 本机可通（200），`npm install` 约 35s / 34 包
+  - MySQL 8 常驻 3306，`root/123456` 可用，`sanguo` 库首次启动自动建表 + 播种
+- 启动顺序：打包（~28s）→ `env -u SERVER__PORT java -jar target\springBootTest-0.0.1-SNAPSHOT.jar --server.port=8081`
+  → `cd vue && npm run dev`。两条链路验证均返回 `{"success":true,"message":"点兵入帐成功"}`。
+
+## 后台管理系统（2026-10-23 新增）
+
+**用途**：前台首页导航栏「后台管理系统」按钮 → `#/admin` → 管理登录（**只有登录，没有注册**）→
+后台控制台，对首页「英雄榜」做增删改查。
+
+**账号**：`admin / admin123`，存在独立表 `admin_user`（BCrypt 加密），
+与前台 `user` 表物理隔离，两边账号互不通用。`DemoDataSeeder.seedAdmin()` 幂等创建（已存在则跳过，不会覆盖改过的密码）。
+
+**令牌隔离**（重要，改动时别破坏）：
+- 将军令牌 = 只有 `sub`；管理令牌 = `sub` + `role=admin`
+- `AuthInterceptor`（前台 `/api/**`）用 `jwtUtil.parseUserToken()`：带 role 声明的一律 401
+- `AdminAuthInterceptor`（`/api/admin/**`）用 `jwtUtil.parseAdminRole()`：无 role 声明一律 401
+- `WebConfig` 里前台拦截器 `excludePathPatterns("/api/admin/**")`，后台拦截器只拦 `/api/admin/**` 且排除 `/api/admin/login`
+
+**接口**（除 login 外都要 `Authorization: Bearer <管理令牌>`）：
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| POST | `/api/admin/login` | `{username,password}` → `{username,role,remark,lastLogin,token}` |
+| GET | `/api/admin/meta` | 看板数据：total / factions[{key,name,count}] / types[{name,count}] / typeOptions / avgPower / topHero |
+| GET | `/api/admin/heroes?keyword&faction&type` | 列表，排序 sortOrder→id |
+| POST | `/api/admin/heroes` | 新增，body 为 hero 字段；未给 sortOrder 时自动排到末尾 |
+| PUT | `/api/admin/heroes/{id}` | 更新（全量字段） |
+| DELETE | `/api/admin/heroes/{id}` | 删除；`@Transactional` 同时清理 `recruit` 里的招募记录 |
+
+**校验**（`AdminController.validate`）：姓名 1–20 字且榜内不可重名、阵营四选一、类型必填 ≤10 字、
+称号 ≤20 字、小传 ≤200 字、武力/统率 0–100、排序 0–9999。错误以 `ApiResult.fail(中文提示)` 返回，
+前端弹窗内直接显示。
+
+**前端文件**：
+- `vue/src/composables/useAdmin.js` —— 管理会话（sessionStorage `sg_admin_session`）、`adminFetch`、hash 路由常量
+- `vue/src/components/admin/AdminLogin.vue` —— 管理登录页（无注册入口）
+- `vue/src/components/admin/AdminApp.vue` —— 控制台：看板 + 表格 + 新增/编辑弹窗 + 删除确认 + toast
+- `vue/src/App.vue` —— hash 路由：`#/admin` 走后台，其余走前台；返回前台用 `history.replaceState` 抹 hash
+- `vue/src/components/SanguoHome.vue` —— 导航栏新增 `button.nav-admin`，`emit('open-admin')`
+
+**踩坑**：后端 jar 在运行时会被 JVM 锁住，`mvn package` 的 repackage 会报
+`Unable to rename '...jar' to '...jar.original'` —— 先停 8081 进程再打包。
+
+—— 最后更新：2026-10-23（新增后台管理系统）

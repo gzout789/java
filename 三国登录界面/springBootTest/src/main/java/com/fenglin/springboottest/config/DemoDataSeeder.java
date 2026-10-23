@@ -1,9 +1,11 @@
 package com.fenglin.springboottest.config;
 
+import com.fenglin.springboottest.entity.AdminUser;
 import com.fenglin.springboottest.entity.Hero;
 import com.fenglin.springboottest.entity.News;
 import com.fenglin.springboottest.entity.Task;
 import com.fenglin.springboottest.entity.User;
+import com.fenglin.springboottest.mapper.AdminUserMapper;
 import com.fenglin.springboottest.mapper.HeroMapper;
 import com.fenglin.springboottest.mapper.NewsMapper;
 import com.fenglin.springboottest.mapper.TaskMapper;
@@ -12,29 +14,36 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
+import org.springframework.core.annotation.Order;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
 /**
  * 演示数据播种：幂等，表里已有数据就跳过。
  * 演示账号：云长 / danfeng123（前端「试看」按钮对应此账号）
  */
 @Component
+@Order(2) // 排在 SchemaMigrator 之后，保证新字段已就位
 public class DemoDataSeeder implements ApplicationRunner {
 
     private static final Logger log = LoggerFactory.getLogger(DemoDataSeeder.class);
 
     private final UserMapper userMapper;
+    private final AdminUserMapper adminUserMapper;
     private final HeroMapper heroMapper;
     private final TaskMapper taskMapper;
     private final NewsMapper newsMapper;
     private final PasswordEncoder passwordEncoder;
 
-    public DemoDataSeeder(UserMapper userMapper, HeroMapper heroMapper, TaskMapper taskMapper,
-                          NewsMapper newsMapper, PasswordEncoder passwordEncoder) {
+    public DemoDataSeeder(UserMapper userMapper, AdminUserMapper adminUserMapper, HeroMapper heroMapper,
+                          TaskMapper taskMapper, NewsMapper newsMapper, PasswordEncoder passwordEncoder) {
         this.userMapper = userMapper;
+        this.adminUserMapper = adminUserMapper;
         this.heroMapper = heroMapper;
         this.taskMapper = taskMapper;
         this.newsMapper = newsMapper;
@@ -43,10 +52,94 @@ public class DemoDataSeeder implements ApplicationRunner {
 
     @Override
     public void run(ApplicationArguments args) {
+        seedAdmin();
         seedUsers();
         seedHeroes();
+        enrichHeroSkills();
         seedTasks();
         seedNews();
+    }
+
+    /**
+     * 烽烟三国杀的武将技与体力表。
+     * 效果实现在前端 src/game/rules.js 的 HERO_SKILLS（按武将姓名匹配 effect），
+     * 这里存的是展示用的文案，后台管理系统可以直接改。
+     */
+    private static final Map<String, String[]> HERO_SKILLS = new LinkedHashMap<>();
+
+    static {
+        HERO_SKILLS.put("曹操", new String[]{"4", "挟主", "奇谋", "出牌阶段，弃一张手牌，命一名其他角色交出一张手牌"});
+        HERO_SKILLS.put("夏侯惇", new String[]{"4", "刚烈", "应策", "你受到创伤后，可对伤害来源造成 1 点创伤"});
+        HERO_SKILLS.put("张辽", new String[]{"4", "威震", "奇谋", "出牌阶段，弃一张手牌，令一名角色弃置一张手牌"});
+        HERO_SKILLS.put("许褚", new String[]{"4", "裸衣", "奇谋", "弃一张手牌，本回合你的【击】创伤 +1"});
+        HERO_SKILLS.put("司马懿", new String[]{"3", "反馈", "应策", "你受到创伤后，可获得伤害来源的一张手牌"});
+        HERO_SKILLS.put("郭嘉", new String[]{"3", "遗计", "应策", "你受到创伤后，可摸两张牌"});
+        HERO_SKILLS.put("关羽", new String[]{"4", "武圣", "应策", "你可将任意一张手牌当作【击】使用"});
+        HERO_SKILLS.put("张飞", new String[]{"4", "咆哮", "奇谋", "出牌阶段，你可额外使用一张【击】"});
+        HERO_SKILLS.put("赵云", new String[]{"4", "龙胆", "应策", "你可将【挡】当【击】、【击】当【挡】使用"});
+        HERO_SKILLS.put("马超", new String[]{"4", "铁骑", "常策", "你计算攻击距离时无视目标的坚驹"});
+        HERO_SKILLS.put("黄忠", new String[]{"4", "烈弓", "常策", "你的攻击距离 +1"});
+        HERO_SKILLS.put("诸葛亮", new String[]{"3", "空城", "常策", "你没有手牌时，不能被【击】与【探囊】指定"});
+        HERO_SKILLS.put("周瑜", new String[]{"3", "英姿", "奇谋", "出牌阶段，你可摸一张牌（每回合限一次）"});
+        HERO_SKILLS.put("吕蒙", new String[]{"4", "克己", "常策", "若本回合未使用过【击】，收兵阶段不必弃牌"});
+        HERO_SKILLS.put("陆逊", new String[]{"3", "谦逊", "常策", "你不能成为【探囊】与【困局】的目标"});
+        HERO_SKILLS.put("甘宁", new String[]{"4", "奇袭", "奇谋", "你可将一张黑色手牌当作【探囊】使用"});
+        HERO_SKILLS.put("太史慈", new String[]{"4", "神射", "应策", "你的【击】造成创伤后，你摸一张牌"});
+        HERO_SKILLS.put("孙权", new String[]{"4", "制衡", "奇谋", "弃置任意数量手牌，再摸等量的牌（每回合限一次）"});
+        HERO_SKILLS.put("吕布", new String[]{"5", "无双", "应策", "你的【击】需两张【挡】才能抵消"});
+        HERO_SKILLS.put("董卓", new String[]{"5", "暴虐", "应策", "你受到创伤后，摸一张牌"});
+        HERO_SKILLS.put("袁绍", new String[]{"4", "乱击", "秘计", "一局一次：弃两张手牌，对场上其他角色各造成 1 点创伤"});
+        HERO_SKILLS.put("公孙瓒", new String[]{"4", "白马", "常策", "你计算与其他角色的距离 -1"});
+    }
+
+    /** 给还没有武将技的武将补上体力与技能（老库升级、新库播种都走这里） */
+    private void enrichHeroSkills() {
+        List<Hero> heroes = heroMapper.selectList(null);
+        int filled = 0;
+        for (Hero hero : heroes) {
+            if (hero.getName() == null) {
+                continue;
+            }
+            String[] skill = HERO_SKILLS.get(hero.getName());
+            if (skill == null) {
+                continue;
+            }
+            Hero patch = new Hero();
+            patch.setId(hero.getId());
+            boolean dirty = false;
+            if (hero.getHp() == null) {
+                patch.setHp(Integer.valueOf(skill[0]));
+                dirty = true;
+            }
+            if (hero.getSkillName() == null || hero.getSkillName().isEmpty()) {
+                patch.setSkillName(skill[1]);
+                patch.setSkillType(skill[2]);
+                patch.setSkillDesc(skill[3]);
+                dirty = true;
+            }
+            if (dirty) {
+                heroMapper.updateById(patch);
+                filled++;
+            }
+        }
+        if (filled > 0) {
+            log.info("已为 {} 位武将补入体力与武将技", filled);
+        }
+    }
+
+    /** 后台管理账号：admin / admin123（只建一次，改过密码不会被覆盖） */
+    private void seedAdmin() {
+        if (adminUserMapper.selectCount(null) > 0) {
+            return;
+        }
+        AdminUser admin = new AdminUser();
+        admin.setUsername("admin");
+        admin.setPassword(passwordEncoder.encode("admin123"));
+        admin.setRole("admin");
+        admin.setRemark("内置管理员");
+        admin.setCreateTime(LocalDateTime.now());
+        adminUserMapper.insert(admin);
+        log.info("已创建后台管理账号：admin / admin123");
     }
 
     private void seedUsers() {

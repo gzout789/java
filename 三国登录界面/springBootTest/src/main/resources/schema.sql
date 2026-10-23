@@ -57,3 +57,16 @@ CREATE TABLE IF NOT EXISTS `recruit` (
   UNIQUE KEY `uk_user_hero` (`user_id`, `hero_id`),
   KEY `idx_user` (`user_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='点将台招募记录表';
+
+-- 后台管理账号（与前台将军账号物理隔离，互不通用）
+CREATE TABLE IF NOT EXISTS `admin_user` (
+  `id`          BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `username`    VARCHAR(50)  NOT NULL                COMMENT '管理账号',
+  `password`    VARCHAR(100) NOT NULL                COMMENT '密码（BCrypt 密文）',
+  `role`        VARCHAR(20)  NOT NULL DEFAULT 'admin' COMMENT '角色：admin/editor',
+  `remark`      VARCHAR(100) DEFAULT NULL            COMMENT '备注',
+  `last_login`  DATETIME     DEFAULT NULL            COMMENT '最近登录时间',
+  `create_time` DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_admin_username` (`username`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='后台管理账号表';

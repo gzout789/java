@@ -5,7 +5,7 @@ import { useTheme, spawnInkRipple, authHeaders } from '../composables/useTheme'
 const props = defineProps({
   user: { type: Object, required: true }
 })
-const emit = defineEmits(['logout'])
+const emit = defineEmits(['logout', 'open-admin', 'open-game'])
 
 const { theme, toggleTheme } = useTheme()
 const ripple = spawnInkRipple
@@ -453,6 +453,26 @@ onMounted(() => {
           @click="goView(v.key); ripple($event)"
         >
           {{ v.label }}
+        </button>
+
+        <!-- 烽烟三国杀：进入牌局 -->
+        <button
+          class="nav-item nav-game ink-ripple-host"
+          type="button"
+          title="进入烽烟三国杀牌局"
+          @click="emit('open-game'); ripple($event)"
+        >
+          <span class="nav-admin-icon" aria-hidden="true">⚔</span>烽烟战场
+        </button>
+
+        <!-- 后台管理系统入口：进入独立的管理登录页 -->
+        <button
+          class="nav-item nav-admin ink-ripple-host"
+          type="button"
+          title="进入后台管理系统"
+          @click="emit('open-admin'); ripple($event)"
+        >
+          <span class="nav-admin-icon" aria-hidden="true">⚙</span>后台管理系统
         </button>
       </nav>
 
@@ -1130,6 +1150,63 @@ onMounted(() => {
   background: linear-gradient(135deg, var(--primary) 0%, var(--primary-deep) 100%);
   border-color: var(--hair);
   box-shadow: 0 6px 16px -6px var(--accent-glow), inset 0 0 0 1px var(--hair-soft);
+}
+
+/* 烽烟战场入口：赤红描边，与后台管理的金色区分开 */
+.nav-item.nav-game {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-left: 4px;
+  color: #e8a48c;
+  border-color: rgba(178, 34, 34, 0.55);
+  background: linear-gradient(180deg, rgba(178, 34, 34, 0.18), rgba(178, 34, 34, 0.05));
+  font-size: 14px;
+  letter-spacing: 2px;
+  padding: 8px 15px 8px 14px;
+}
+.nav-item.nav-game:hover {
+  color: #ffe4d8;
+  border-color: var(--primary);
+  box-shadow: 0 6px 18px -8px var(--accent-glow);
+}
+.nav-item.nav-game::before {
+  content: '';
+  width: 1px;
+  height: 18px;
+  margin-right: 7px;
+  background: var(--hair);
+}
+
+/* 后台管理系统入口：金色描边，与常规导航区分开 */
+.nav-item.nav-admin {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-left: 4px;
+  color: var(--gold-soft);
+  border-color: var(--hair);
+  background: linear-gradient(180deg, rgba(212, 175, 55, 0.14), rgba(212, 175, 55, 0.04));
+  font-size: 14px;
+  letter-spacing: 2px;
+  padding: 8px 15px 8px 14px;
+}
+.nav-item.nav-admin:hover {
+  color: #fff6dc;
+  border-color: var(--gold);
+  box-shadow: 0 6px 18px -8px rgba(212, 175, 55, 0.85);
+}
+.nav-item.nav-admin::before {
+  content: '';
+  width: 1px;
+  height: 18px;
+  margin-right: 7px;
+  background: var(--hair);
+}
+.nav-admin-icon {
+  font-size: 13px;
+  line-height: 1;
+  opacity: 0.9;
 }
 .top-right {
   display: flex;

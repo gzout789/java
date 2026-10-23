@@ -155,3 +155,29 @@ html[data-theme="light"] {
     display: none;
   }
 }
+
+/* ========== 烽烟三国杀 · 牌桌调色 ========== */
+:root {
+  --g-text: #f0e6d2;
+  --g-dim: rgba(240, 230, 210, 0.72);
+  --g-faint: rgba(240, 230, 210, 0.45);
+  --g-hair: rgba(212, 175, 55, 0.28);
+  --g-hair-soft: rgba(212, 175, 55, 0.14);
+  --g-gold: #d4af37;
+  --g-panel: linear-gradient(165deg, rgba(30, 23, 13, 0.94), rgba(17, 12, 7, 0.96));
+  --g-panel-2: rgba(255, 255, 255, 0.05);
+  --g-felt: radial-gradient(circle at 50% 42%, #2a2013 0%, #17110a 58%, #0d0906 100%);
+}
+
+/* 宣纸亮色下的牌桌 */
+html[data-theme='light'] {
+  --g-text: #2c2114;
+  --g-dim: rgba(44, 33, 20, 0.72);
+  --g-faint: rgba(44, 33, 20, 0.5);
+  --g-hair: rgba(154, 111, 30, 0.4);
+  --g-hair-soft: rgba(154, 111, 30, 0.2);
+  --g-gold: #9a6f1e;
+  --g-panel: linear-gradient(165deg, rgba(255, 251, 243, 0.97), rgba(248, 238, 219, 0.98));
+  --g-panel-2: rgba(120, 80, 30, 0.06);
+  --g-felt: radial-gradient(circle at 50% 42%, #f0e0bd 0%, #e2cda2 58%, #d3ba8b 100%);
+}

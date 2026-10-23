@@ -38,7 +38,7 @@ public class AuthInterceptor implements HandlerInterceptor {
             token = header.substring(7).trim();
         }
 
-        String username = token == null || token.isEmpty() ? null : jwtUtil.parseUsername(token);
+        String username = token == null || token.isEmpty() ? null : jwtUtil.parseUserToken(token);
         if (username == null) {
             writeUnauthorized(response);
             return false;
