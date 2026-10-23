@@ -19,8 +19,8 @@ set "JAVA_HOME=C:\Program Files\Zulu\zulu-21"
 set "PATH=%JAVA_HOME%\bin;%PATH%"
 
 rem ---- 优先使用 D 盘持久化 Maven，其次 IDEA 内置，最后项目自带 mvnw ----
-set "MVN_CMD=D:\tools\maven3\bin\mvn.cmd"
-if not exist "%MVN_CMD%" set "MVN_CMD=D:\IntelliJ IDEA 2024.3.2.2\plugins\maven\lib\maven3\bin\mvn.cmd"
+set "MVN_CMD=C:\Program Files\JetBrains\IntelliJ IDEA 2026.2.3\plugins\maven-plugin\lib\maven3\bin\mvn.cmd"
+if not exist "%MVN_CMD%" set "MVN_CMD=C:\Program Files\JetBrains\IntelliJ IDEA 2026.2.3\plugins\maven-plugin\lib\maven3\bin\mvn.cmd"
 if not exist "%MVN_CMD%" set "MVN_CMD=%~dp0mvnw.cmd"
 
 echo [打包] 使用 Maven: %MVN_CMD%

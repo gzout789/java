@@ -42,6 +42,7 @@ const greeting = computed(() => {
 const VIEWS = [
   { key: 'overview', label: '总览' },
   { key: 'heroes', label: '英雄榜' },
+  { key: 'recruit', label: '点将台' },
   { key: 'tasks', label: '军机要务' },
   { key: 'news', label: '烽火快报' }
 ]
@@ -279,6 +280,7 @@ onBeforeUnmount(() => {
   clearTimeout(heroTimer)
   clearTimeout(taskTimer)
   clearTimeout(newsTimer)
+  clearTimeout(recruitMsgTimer)
 })
 
 /* 当前视图的关键词（用于「筛选中」提示条） */
@@ -323,6 +325,76 @@ watch(newsKeyword, () => {
   newsTimer = setTimeout(loadNews, 300)
 })
 
+/* ---------------- 点将台（招募） ---------------- */
+const recruit = ref(null)
+const recruitLoading = ref(false)
+const recruitingId = ref(null)
+const recruitMsg = ref('')
+const recruitFaction = ref('all')
+
+let recruitMsgTimer = null
+function flashRecruitMsg(text) {
+  recruitMsg.value = text
+  clearTimeout(recruitMsgTimer)
+  recruitMsgTimer = setTimeout(() => (recruitMsg.value = ''), 2600)
+}
+
+const gold = computed(() => (recruit.value ? recruit.value.gold : null))
+
+const recruitChips = computed(() => [
+  { key: 'all', label: '全部' },
+  ...FACTIONS.map((f) => ({ key: f.key, label: f.name }))
+])
+
+const recruitAll = computed(() => (recruit.value && recruit.value.generals) || [])
+
+const recruitCandidates = computed(() =>
+  recruitAll.value.filter(
+    (g) => !g.recruited && (recruitFaction.value === 'all' || g.faction === recruitFaction.value)
+  )
+)
+
+const recruitedGenerals = computed(() => recruitAll.value.filter((g) => g.recruited))
+
+async function loadRecruit() {
+  recruitLoading.value = true
+  try {
+    const data = await requestJson('/api/recruit')
+    if (data && data.success) recruit.value = data.data
+  } catch {
+    /* 静默失败，保留上次结果 */
+  } finally {
+    recruitLoading.value = false
+  }
+}
+
+async function doRecruit(hero) {
+  if (recruitingId.value) return
+  if (gold.value !== null && gold.value < hero.cost) {
+    flashRecruitMsg(`军饷不足，尚差 ${hero.cost - gold.value} 石`)
+    return
+  }
+  recruitingId.value = hero.id
+  try {
+    const res = await fetch('/api/recruit', {
+      method: 'POST',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ heroId: hero.id })
+    })
+    if (res.status === 401) {
+      handleUnauthorized()
+      return
+    }
+    const data = await res.json()
+    flashRecruitMsg(data.message || (data.success ? '招募成功' : '招募未成'))
+    if (data.success) await loadRecruit()
+  } catch {
+    flashRecruitMsg('与军中失联，招募未成')
+  } finally {
+    recruitingId.value = null
+  }
+}
+
 /* ---------------- 退出 ---------------- */
 function handleLogout() {
   emit('logout')
@@ -334,6 +406,7 @@ onMounted(() => {
   loadHeroes()
   loadTasks()
   loadNews()
+  loadRecruit()
 })
 </script>
 
@@ -558,6 +631,28 @@ onMounted(() => {
               </li>
             </ul>
           </section>
+
+          <section class="card" style="--i: 5">
+            <h2 class="card-title more" @click="goView('recruit')">
+              点将台
+              <span class="more-link">前往点将 →</span>
+            </h2>
+            <div class="total-line">
+              <span class="total-num">{{ recruit ? recruit.recruitedCount : '—' }}</span>
+              <span class="total-label">员将军已在帐下</span>
+            </div>
+            <p class="rc-ov-gold">
+              军饷余 <b>{{ recruit ? recruit.gold : '—' }}</b> 石
+              <span v-if="recruit" class="rc-ov-used">（已用 {{ recruit.spent }} / {{ recruit.initialGold }}）</span>
+            </p>
+            <ul class="rc-ov-roster">
+              <li v-for="g in recruitedGenerals.slice(-3)" :key="g.id" :data-f="g.faction">
+                <span class="rc-ov-name">{{ g.name }}</span>
+                <span class="rc-ov-meta">{{ g.typeName }}</span>
+              </li>
+              <li v-if="!recruitedGenerals.length" class="rc-ov-empty">帐下尚虚，速去点将台招贤</li>
+            </ul>
+          </section>
         </div>
       </template>
 
@@ -619,6 +714,101 @@ onMounted(() => {
         <p v-if="!heroes.length" class="tip">榜上暂无符合条件的将军</p>
       </section>
 
+      <!-- ========== 点将台 ========== -->
+      <section v-else-if="activeView === 'recruit'" class="card board recruit">
+        <div class="board-head">
+          <h2 class="card-title nomargin">点将台</h2>
+          <div class="gold-box">
+            <span class="gold-label">军饷</span>
+            <span class="gold-num">{{ recruit ? recruit.gold : '—' }}</span>
+            <span class="gold-unit">石</span>
+            <span v-if="recruit" class="gold-used">已用 {{ recruit.spent }} / {{ recruit.initialGold }}</span>
+          </div>
+        </div>
+
+        <div class="chips" style="margin: 0 0 8px">
+          <button
+            v-for="c in recruitChips"
+            :key="c.key"
+            type="button"
+            :class="['chip', 'ink-ripple-host', { active: recruitFaction === c.key }]"
+            @click="recruitFaction = c.key; ripple($event)"
+          >
+            {{ c.label }}
+          </button>
+        </div>
+
+        <p class="rc-hint">同阵营按原价招揽；他阵营需加价五成。军饷有限，先招心腹，再图虎将。</p>
+
+        <div class="hero-grid">
+          <article v-for="(g, i) in recruitCandidates" :key="g.id" class="hero-card rc-card" :style="{ '--i': i }">
+            <div class="hc-top">
+              <span class="hc-seal" :data-f="g.faction">{{ factionName(g.faction).slice(-1) }}</span>
+              <div class="hc-name">
+                <b>{{ g.name }}</b>
+                <i>{{ g.epithet }}</i>
+              </div>
+              <span class="hc-fac" :data-f="g.faction">{{ factionName(g.faction) }}</span>
+            </div>
+
+            <div class="hc-portrait" :data-f="g.faction">
+              <img
+                :src="heroImg(g.name)"
+                :alt="g.name"
+                loading="lazy"
+                @error="$event.target.parentElement.style.display = 'none'"
+              />
+              <span v-if="!g.sameFaction" class="rc-foreign">他阵营 +50%</span>
+            </div>
+
+            <p class="hc-desc">{{ g.description }}</p>
+
+            <div class="hc-tags">
+              <span class="hc-type" :data-f="g.faction">{{ g.typeName }}</span>
+              <span v-if="g.power != null" class="hc-power">武力 {{ g.power }}</span>
+              <span v-if="g.leadership != null" class="hc-power">统率 {{ g.leadership }}</span>
+            </div>
+
+            <div class="rc-foot">
+              <span class="rc-cost"><b>{{ g.cost }}</b> 石</span>
+              <button
+                type="button"
+                class="rc-btn ink-ripple-host"
+                :disabled="recruitingId === g.id || (gold !== null && gold < g.cost)"
+                @click="doRecruit(g); ripple($event)"
+              >
+                {{
+                  recruitingId === g.id
+                    ? '招揽中…'
+                    : gold !== null && gold < g.cost
+                      ? '军饷不足'
+                      : '招 募'
+                }}
+              </button>
+            </div>
+          </article>
+        </div>
+        <p v-if="!recruitCandidates.length" class="tip">
+          {{ recruitLoading ? '点将台开张中…' : '此旗号下已无未招之将' }}
+        </p>
+
+        <template v-if="recruitedGenerals.length">
+          <h3 class="rc-sub">
+            帐下诸将
+            <span class="rc-sub-count">{{ recruitedGenerals.length }} 员</span>
+          </h3>
+          <ul class="rc-roster">
+            <li v-for="g in recruitedGenerals" :key="g.id" :data-f="g.faction">
+              <span class="rc-roster-seal">{{ factionName(g.faction).slice(-1) }}</span>
+              <span class="rc-roster-name">{{ g.name }}</span>
+              <span class="rc-roster-epithet">{{ g.epithet }}</span>
+              <span class="rc-roster-meta">{{ factionName(g.faction) }} · {{ g.typeName }}</span>
+              <span class="rc-roster-time">{{ g.recruitedAt }}</span>
+            </li>
+          </ul>
+        </template>
+      </section>
+
       <!-- ========== 军机要务 ========== -->
       <section v-else-if="activeView === 'tasks'" class="card board">
         <div class="board-head">
@@ -672,6 +862,10 @@ onMounted(() => {
         <p v-if="!news.length" class="tip">暂无符合条件的快报</p>
       </section>
     </main>
+
+    <Transition name="rc-fade">
+      <div v-if="recruitMsg" class="rc-toast">{{ recruitMsg }}</div>
+    </Transition>
 
     <footer class="footer">凭此印信，出入中军 · 点「退出大帐」可返回登录</footer>
   </div>
@@ -1783,5 +1977,266 @@ onMounted(() => {
   .news.full li {
     animation: none;
   }
+}
+
+/* ---------- 点将台 ---------- */
+.gold-box {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  border: 1px solid var(--hair);
+  border-radius: 999px;
+  padding: 5px 14px;
+  background: rgba(212, 175, 55, 0.06);
+}
+.gold-label {
+  font-size: 11px;
+  letter-spacing: 2px;
+  color: var(--text-mute);
+}
+.gold-num {
+  font-family: var(--font-cal);
+  font-size: 20px;
+  letter-spacing: 1px;
+  color: var(--gold-soft);
+}
+.gold-unit {
+  font-size: 11px;
+  color: var(--text-mute);
+}
+.gold-used {
+  margin-left: 8px;
+  font-size: 11px;
+  letter-spacing: 1px;
+  color: var(--text-faint);
+}
+
+.rc-hint {
+  margin: 0 0 14px;
+  font-size: 12px;
+  letter-spacing: 1px;
+  color: var(--text-faint);
+}
+
+.rc-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+.rc-card .hc-portrait {
+  position: relative;
+}
+.rc-foreign {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  font-size: 10.5px;
+  letter-spacing: 1px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  color: #f0d9a8;
+  background: rgba(140, 40, 30, 0.85);
+  border: 1px solid rgba(212, 175, 55, 0.5);
+}
+.rc-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 1px dashed var(--hair-soft);
+}
+.rc-cost {
+  font-size: 12px;
+  letter-spacing: 1px;
+  color: var(--text-mute);
+}
+.rc-cost b {
+  font-family: var(--font-cal);
+  font-size: 18px;
+  letter-spacing: 1px;
+  color: var(--gold-soft);
+}
+.rc-btn {
+  cursor: pointer;
+  border: 1px solid var(--gold);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--gold);
+  font-family: var(--font-cal);
+  font-size: 14px;
+  letter-spacing: 3px;
+  padding: 6px 16px;
+  transition: background 0.2s, box-shadow 0.2s, color 0.2s, border-color 0.2s;
+}
+.rc-btn:hover:not(:disabled) {
+  background: rgba(212, 175, 55, 0.14);
+  box-shadow: 0 0 16px -4px var(--accent-glow);
+}
+.rc-btn:disabled {
+  cursor: not-allowed;
+  border-color: var(--hair-soft);
+  color: var(--text-ghost);
+}
+
+.rc-sub {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 26px 0 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--hair-soft);
+  font-family: var(--font-cal);
+  font-size: 16px;
+  font-weight: 400;
+  letter-spacing: 4px;
+  color: var(--gold-soft);
+}
+.rc-sub-count {
+  font-size: 12px;
+  letter-spacing: 1px;
+  color: var(--text-faint);
+}
+
+.rc-roster {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 10px;
+}
+.rc-roster li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--hair-soft);
+  border-radius: 8px;
+  padding: 9px 12px;
+  background: var(--surface-soft);
+  font-size: 13px;
+  letter-spacing: 1px;
+}
+.rc-roster-seal {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--gold);
+  border-radius: 4px;
+  font-size: 12px;
+  color: var(--gold);
+}
+.rc-roster li[data-f="wei"] .rc-roster-seal {
+  border-color: #5b9bd5;
+  color: #5b9bd5;
+}
+.rc-roster li[data-f="shu"] .rc-roster-seal {
+  border-color: #4caf7d;
+  color: #4caf7d;
+}
+.rc-roster li[data-f="wu"] .rc-roster-seal {
+  border-color: #3fbdb0;
+  color: #3fbdb0;
+}
+.rc-roster li[data-f="han"] .rc-roster-seal {
+  border-color: #d95f5f;
+  color: #d95f5f;
+}
+.rc-roster-name {
+  font-family: var(--font-cal);
+  letter-spacing: 2px;
+  color: var(--gold-soft);
+}
+.rc-roster-epithet {
+  font-size: 11px;
+  color: var(--text-mute);
+}
+.rc-roster-meta {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-faint);
+}
+.rc-roster-time {
+  font-size: 11px;
+  color: var(--text-ghost);
+}
+
+/* 总览里的点将台小卡 */
+.rc-ov-gold {
+  margin: 8px 0 0;
+  font-size: 12px;
+  letter-spacing: 1px;
+  color: var(--text-mute);
+}
+.rc-ov-gold b {
+  font-family: var(--font-cal);
+  font-size: 15px;
+  color: var(--gold-soft);
+}
+.rc-ov-used {
+  font-size: 11px;
+  color: var(--text-ghost);
+}
+.rc-ov-roster {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+}
+.rc-ov-roster li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px dashed var(--hair-soft);
+  font-size: 13px;
+}
+.rc-ov-roster li:last-child {
+  border-bottom: none;
+}
+.rc-ov-name {
+  font-family: var(--font-cal);
+  letter-spacing: 2px;
+  color: var(--text);
+}
+.rc-ov-meta {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-faint);
+}
+.rc-ov-roster li.rc-ov-empty {
+  font-size: 12.5px;
+  letter-spacing: 1px;
+  color: var(--text-faint);
+}
+
+/* 招募提示 */
+.rc-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 64px;
+  transform: translateX(-50%);
+  z-index: 50;
+  padding: 10px 22px;
+  border-radius: 999px;
+  background: rgba(20, 13, 8, 0.94);
+  border: 1px solid var(--hair);
+  color: var(--gold-soft);
+  font-size: 13.5px;
+  letter-spacing: 2px;
+  box-shadow: 0 12px 30px -12px rgba(0, 0, 0, 0.8);
+  pointer-events: none;
+}
+.rc-fade-enter-active,
+.rc-fade-leave-active {
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+.rc-fade-enter-from,
+.rc-fade-leave-to {
+  opacity: 0;
+  transform: translate(-50%, 8px);
 }
 </style>

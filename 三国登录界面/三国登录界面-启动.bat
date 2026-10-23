@@ -5,7 +5,7 @@ cd /d "C:\Users\Administrator\Desktop\三国登录界面\vue"
 set "NPM=npm"
 where npm >nul 2>nul
 if errorlevel 1 (
-  set "NPM=C:\Users\Administrator\.workbuddy\binaries\node\versions\22.22.2-2\node.exe C:\Users\Administrator\.workbuddy\binaries\node\versions\22.22.2-2\node_modules\npm\bin\npm-cli.js"
+  set "NPM=C:\Users\user\.workbuddy\binaries\node\versions\22.22.2-3\node.exe C:\Users\user\.workbuddy\binaries\node\versions\22.22.2-3\node_modules\npm\bin\npm-cli.js"
 )
 
 if not exist "node_modules" (

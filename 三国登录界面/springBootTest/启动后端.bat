@@ -43,8 +43,8 @@ rem ---- 4. 若无 jar 则自动编译打包 ----
 rem     注意：用 goto 结构，不能把 set 和 %%MVN_CMD%% 放进同一个括号块（延迟展开问题）
 if exist "target\springBootTest-0.0.1-SNAPSHOT.jar" goto runjar
 echo [提示] 未发现 jar 包，先编译打包（约 1-3 分钟）...
-set "MVN_CMD=D:\tools\maven3\bin\mvn.cmd"
-if not exist "%MVN_CMD%" set "MVN_CMD=D:\IntelliJ IDEA 2024.3.2.2\plugins\maven\lib\maven3\bin\mvn.cmd"
+set "MVN_CMD=C:\Program Files\JetBrains\IntelliJ IDEA 2026.2.3\plugins\maven-plugin\lib\maven3\bin\mvn.cmd"
+if not exist "%MVN_CMD%" set "MVN_CMD=C:\Program Files\JetBrains\IntelliJ IDEA 2026.2.3\plugins\maven-plugin\lib\maven3\bin\mvn.cmd"
 if exist "%MVN_CMD%" (
     call "%MVN_CMD%" -q -DskipTests package
 ) else (

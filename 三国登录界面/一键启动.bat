@@ -25,7 +25,7 @@ echo   [OK] Java 已就绪
 set "NPM=npm"
 where npm >nul 2>nul
 if errorlevel 1 (
-    set "NPM=C:\Users\Administrator\.workbuddy\binaries\node\versions\22.22.2-2\node.exe C:\Users\Administrator\.workbuddy\binaries\node\versions\22.22.2-2\node_modules\npm\bin\npm-cli.js"
+    set "NPM=C:\Users\user\.workbuddy\binaries\node\versions\22.22.2-3\node.exe C:\Users\user\.workbuddy\binaries\node\versions\22.22.2-3\node_modules\npm\bin\npm-cli.js"
 )
 if not exist "%~dp0vue\node_modules" (
     echo   [提示] 前端依赖未安装，首次安装约需 1-2 分钟...
@@ -61,7 +61,7 @@ if !htry! gtr 30 goto :healthfail
 rem  注意 --noproxy：避免系统代理(HTTP_PROXY)把 localhost 请求也转发出去导致误判
 curl -s -m 3 --noproxy "*" -X POST "http://localhost:8081/api/login" ^
      -H "Content-Type: application/json" ^
-     -d "{\"username\":\"云长\",\"password\":\"danfeng123\"}" > "!HEALTH_JSON!" 2>nul
+     -d "{\"username\":\"\u4e91\u957f\",\"password\":\"danfeng123\"}" > "!HEALTH_JSON!" 2>nul
 findstr /c:"success" "!HEALTH_JSON!" >nul 2>nul
 if not errorlevel 1 (
     del "!HEALTH_JSON!" >nul 2>nul
@@ -137,7 +137,7 @@ set /a etry+=1
 if !etry! gtr 15 goto :e2efail
 curl -s -m 5 --noproxy "*" -X POST "http://localhost:5173/api/login" ^
      -H "Content-Type: application/json" ^
-     -d "{\"username\":\"云长\",\"password\":\"danfeng123\"}" > "!E2E_JSON!" 2>nul
+     -d "{\"username\":\"\u4e91\u957f\",\"password\":\"danfeng123\"}" > "!E2E_JSON!" 2>nul
 findstr /c:"点兵入帐成功" "!E2E_JSON!" >nul 2>nul
 if not errorlevel 1 (
     del "!E2E_JSON!" >nul 2>nul
