@@ -9,7 +9,7 @@
 import { reactive } from 'vue'
 import {
   ROLES, ROLE_SETUP, CARDS, EQUIPS,
-  buildDeck, isEquip, judgeResult, shuffle, cardName
+  buildDeck, isEquip, judgeResult, shuffle, cardName, isRedCard, suitSymbol
 } from './rules.js'
 import { aiPlayTurn, aiAskDodge, aiAskSave, aiAskNegate, aiPickDiscard } from './ai.js'
 
@@ -143,6 +143,14 @@ export class Game {
     seat.slashCount = 0
     seat.onceUsed = {}
     seat.boost = 0
+    // 挟天子的禁击只在自己回合内生效，回合结束自然解除
+    if (seat.slashBanned) {
+      seat.noSlashThisTurn = true
+      seat.slashBanned = false
+      this.log(`${seat.label} 被挟天子以令诸侯，本回合用兵不得出【击】。`, 'warn')
+    } else {
+      seat.noSlashThisTurn = false
+    }
     if (!seat.isAI) await wait(120)
 
     // 2. 判定
@@ -177,6 +185,11 @@ export class Game {
     // 6. 收阵
     this.state.stage = 'end'
     seat.trapEffects = null
+    if (this.hasEffect(seat, 'end_draw')) {
+      const sk = this.skillOf(seat, 'end_draw')
+      this.drawCards(seat, 1)
+      this.log(`${seat.label} 的【${sk.name}】生效，回眸一望，摸一张牌。`, 'skill')
+    }
     await this.tick(seat, 200)
   }
 
@@ -189,7 +202,10 @@ export class Game {
     for (const card of traps) {
       const drawn = this.drawRaw(1)
       if (!drawn.length) break
-      const judgeCard = drawn[0]
+      let judgeCard = drawn[0]
+      // 鬼才：判定牌生效前，其他角色可打出一张手牌改判
+      const swapped = await this.judgeSwap(seat, card.key, judgeCard)
+      if (swapped) judgeCard = swapped
       const hit = judgeResult(card.key, judgeCard)
       this.state.discard.push(judgeCard)
       this.log(
@@ -220,8 +236,59 @@ export class Game {
     }
   }
 
+  /**
+   * 鬼才（司马懿）：判定牌生效前，其他角色可打出一张手牌代替之。
+   * AI 按敌友立场自动改判；玩家弹出询问，点一张手牌改判、点「不改判」跳过。
+   * 返回替代判定牌（含 uid 不会与手牌冲突），不改判返回 null。
+   */
+  async judgeSwap(target, trapKey, judgeCard) {
+    const hit = judgeResult(trapKey, judgeCard)
+    for (const s of this.state.seats) {
+      if (!s.alive || s.idx === target.idx) continue
+      if (!this.hasEffect(s, 'judge_swap') || s.onceUsed.judgeSwap) continue
+      if (!s.hand.length) continue
+      const sk = this.skillOf(s, 'judge_swap')
+      if (s.isAI) {
+        // 与被判定者有交战记录 → 让其判定为凶；否则救一把，让判定为吉
+        const isEnemy = (s.marks[target.idx] || 0) > 0 || (target.marks[s.idx] || 0) > 0
+        const wantHit = isEnemy
+        if (hit === wantHit) continue
+        const flip = s.hand.find((c) => judgeResult(trapKey, c) === wantHit)
+        if (!flip) continue
+        this.removeHand(s, flip)
+        this.state.discard.push(judgeCard)
+        s.onceUsed.judgeSwap = true
+        this.log(`${s.label} 发动【${sk.name}】，天机可改，判定牌已换。`, 'skill')
+        return flip
+      }
+      // 玩家询问改判
+      this.state.pending = {
+        kind: 'judgeSwap',
+        idx: s.idx,
+        trapKey,
+        oldCard: judgeCard,
+        text: `${target.label} 的【${cardName(trapKey)}】判定中（${judgeCard.num}${suitSymbol(judgeCard.suit)}），是否打出手牌以【${sk.name}】改判？`
+      }
+      const action = await this.waitHuman()
+      this.state.pending = null
+      if (action && action.type === 'judgeSwap') {
+        const card = s.hand.find((c) => c.uid === action.cardUid)
+        if (card) {
+          this.removeHand(s, card)
+          this.state.discard.push(judgeCard)
+          s.onceUsed.judgeSwap = true
+          this.log(`${s.label} 发动【${sk.name}】，判定牌已换。`, 'skill')
+          return card
+        }
+      }
+    }
+    return null
+  }
+
   async discardPhase(seat) {
-    const over = seat.hand.length - seat.hp
+    // 昭烈：手牌上限 +2
+    const limit = seat.hp + (this.hasEffect(seat, 'lord_support') ? 2 : 0)
+    const over = seat.hand.length - limit
     if (over <= 0) return
     if (this.hasEffect(seat, 'no_discard') && seat.slashCount === 0) {
       this.log(`${seat.label} 本回合未动刀兵（克己），不必弃牌。`, 'skill')
@@ -298,6 +365,10 @@ export class Game {
           this.warn('此回合【击】已用尽。')
           return false
         }
+        if (seat.noSlashThisTurn) {
+          this.warn('你被挟天子以令诸侯，本回合不能用【击】。')
+          return false
+        }
         if (seat.trapEffects && seat.trapEffects.skipSlash) {
           this.warn('身陷困局，本回合不能用【击】。')
           return false
@@ -330,9 +401,12 @@ export class Game {
           seat.hand.push(card)
           return false
         }
-        target.hp++
+        // 刚烈：受到的【援】回复量 +1
+        let gain = 1
+        if (this.hasEffect(target, 'heal_boost')) gain += 1
+        target.hp = Math.min(target.maxHp, target.hp + gain)
         this.state.discard.push(card)
-        this.log(`${seat.label} 对 ${target.label} 施【援】，回复 1 点体力。`, 'good')
+        this.log(`${seat.label} 对 ${target.label} 施【援】，回复 ${gain} 点体力。`, 'good')
         break
       }
       case 'draw2': {
@@ -380,7 +454,10 @@ export class Game {
     const def = EQUIPS[key]
     const old = seat.equip[def.slot]
     this.removeHand(seat, card)
-    if (old) this.state.discard.push(old)
+    if (old) {
+      this.state.discard.push(old)
+      if (old !== card) this.onEquipLost(seat) // 换装失去旧装备，触发枭姬
+    }
     seat.equip[def.slot] = card
     this.log(`${seat.label} 装备【${def.name}】——${def.desc}。`, 'skill')
     this.afterAction()
@@ -389,7 +466,10 @@ export class Game {
   async resolveSlash(source, target, card) {
     this.log(`${source.label} 对 ${target.label} 挥出一记【击】。`, 'hit')
     source.marks[target.idx] = (source.marks[target.idx] || 0) + 1
-    const need = this.hasEffect(source, 'double_dodge') ? 2 : 1
+    // 无双需双挡；武圣若以红色牌当【击】，同样需双挡（万军之中取首级）
+    let need = 1
+    if (this.hasEffect(source, 'double_dodge')) need = 2
+    else if (this.hasEffect(source, 'slash_any') && card && isRedCard(card) && card.key !== 'slash') need = 2
     let blocked = false
     let used = 0
     while (used < need) {
@@ -407,6 +487,31 @@ export class Game {
       this.log(`${target.label} 挡下这一击。`, 'good')
     }
     this.state.discard.push(card)
+    // 反间：周瑜被【击】指定后，可弃一张牌反夺对方手牌
+    if (this.hasEffect(target, 'counter_steal') && source.alive && target.hand.length > 0 && target.hp > 0) {
+      await this.counterSteal(target, source)
+    }
+  }
+
+  /** 反间（周瑜）：弃一张手牌，令对方交一张手牌，否则其受 1 点创伤 */
+  async counterSteal(from, source) {
+    const sk = this.skillOf(from, 'counter_steal')
+    // AI 与玩家统一自动结算：弃一张非关键牌发动
+    const cost = from.hand.find((c) => c.key !== 'heal') || from.hand[0]
+    if (!cost) return
+    this.removeHand(from, cost)
+    this.state.discard.push(cost)
+    this.log(`${from.label} 发动【${sk.name}】，蒋干盗书，将计就计！`, 'skill')
+    if (source.hand.length) {
+      const i = Math.floor(Math.random() * source.hand.length)
+      const card = source.hand.splice(i, 1)[0]
+      from.hand.push(card)
+      this.log(`${source.label} 交予 ${from.label} 一张手牌。`, 'skill')
+    } else {
+      this.log(`${source.label} 无牌可交，受 1 点创伤。`, 'skill')
+      source.hp -= 1
+      if (source.hp <= 0) await this.dying(source, from)
+    }
   }
 
   /** 询问目标是否出【挡】 */
@@ -467,10 +572,24 @@ export class Game {
       target.equip[pick.slot] = null
       source.hand.push(card)
       this.log(`${source.label} 探囊取物，夺走 ${target.label} 的【${cardName(card.key)}】。`, 'hit')
+      this.onEquipLost(target)
+    }
+  }
+
+  /** 枭姬：失去装备区一张牌后摸两张 */
+  onEquipLost(seat) {
+    if (this.hasEffect(seat, 'equip_lost_draw2')) {
+      const sk = this.skillOf(seat, 'equip_lost_draw2')
+      this.drawCards(seat, 2)
+      this.log(`${seat.label} 发动【${sk.name}】，武备虽失，战意更盛，摸两张牌。`, 'skill')
     }
   }
 
   async resolveDuel(source, target) {
+    if (this.hasEffect(target, 'immune_duel')) {
+      this.log(`${target.label} 生性谦冲，不为【惑敌】所动。`, 'skill')
+      return
+    }
     this.log(`${source.label} 向 ${target.label} 发起【惑敌】。`, 'warn')
     let turn = target
     let other = source
@@ -557,38 +676,74 @@ export class Game {
         }
       }
     }
+    // 谦冲：计略造成的创伤 -1
+    const SCHEME_CAUSES = ['探囊', '困局', '断粮', '惊雷', '惑敌', '乱击', '火烧赤壁', '夷陵', '离间']
+    if (this.hasEffect(target, 'scheme_resist') && SCHEME_CAUSES.includes(cause)) {
+      amount -= 1
+      if (amount <= 0) {
+        this.log(`${target.label} 生性谦冲，计略如风过岗。`, 'skill')
+        return
+      }
+    }
     target.hp -= amount
     this.log(`${target.label} 受到 ${amount} 点创伤（${cause || '交锋'}），剩余 ${Math.max(target.hp, 0)} 点体力。`, 'hit')
 
-    // 受伤触发的应策
-    const eff = target.hero.skill.effect
-    if (eff === 'hurt_draw1') {
+    // 受伤触发的应策（一名武将可有多个应策，依次结算）
+    if (this.hasEffect(target, 'hurt_draw1')) {
+      const sk = this.skillOf(target, 'hurt_draw1')
       this.drawCards(target, 1)
-      this.log(`${target.label} 发动【${target.hero.skill.name}】，摸一张牌。`, 'skill')
-    } else if (eff === 'hurt_draw2') {
+      this.log(`${target.label} 发动【${sk.name}】，摸一张牌。`, 'skill')
+    }
+    if (this.hasEffect(target, 'hurt_draw2')) {
+      const sk = this.skillOf(target, 'hurt_draw2')
       this.drawCards(target, 2)
-      this.log(`${target.label} 发动【${target.hero.skill.name}】，摸两张牌。`, 'skill')
-    } else if (eff === 'hurt_steal' && source && source.hand.length) {
+      this.log(`${target.label} 发动【${sk.name}】，摸两张牌。`, 'skill')
+    }
+    if (this.hasEffect(target, 'hurt_steal') && source && source.hand.length) {
+      const sk = this.skillOf(target, 'hurt_steal')
       const i = Math.floor(Math.random() * source.hand.length)
       const card = source.hand.splice(i, 1)[0]
       target.hand.push(card)
-      this.log(`${target.label} 发动【${target.hero.skill.name}】，取得 ${source.label} 一张手牌。`, 'skill')
-    } else if (eff === 'retaliate' && source && source.alive) {
-      this.log(`${target.label} 发动【${target.hero.skill.name}】，反噬 ${source.label}。`, 'skill')
+      this.log(`${target.label} 发动【${sk.name}】，取得 ${source.label} 一张手牌。`, 'skill')
+    }
+    if (this.hasEffect(target, 'retaliate') && source && source.alive) {
+      const sk = this.skillOf(target, 'retaliate')
+      this.log(`${target.label} 发动【${sk.name}】，反噬 ${source.label}。`, 'skill')
       source.hp -= 1
       if (source.hp <= 0) await this.dying(source, target)
     }
+    // 拔矢啖睛：受【击】后令来源二选一——弃两张手牌或受 1 点创伤
+    if (this.hasEffect(target, 'retaliate_choice') && source && source.alive && cause === 'slash') {
+      const sk = this.skillOf(target, 'retaliate_choice')
+      this.log(`${target.label} 拔矢啖睛，怒视 ${source.label}！`, 'skill')
+      await this.choiceDiscardOrDamage(target, source, sk)
+    }
 
     // 造成击杀伤害后的抽牌（太史慈·神射）
-    if (source && cause === 'slash' && source.hero.skill.effect === 'slash_draw') {
+    if (source && cause === 'slash' && this.hasEffect(source, 'slash_draw')) {
+      const sk = this.skillOf(source, 'slash_draw')
       this.drawCards(source, 1)
-      this.log(`${source.label} 的【${source.hero.skill.name}】生效，箭无虚发，摸一张牌。`, 'skill')
+      this.log(`${source.label} 的【${sk.name}】生效，箭无虚发，摸一张牌。`, 'skill')
     }
 
     if (target.hp <= 0) {
       await this.dying(target, source)
     }
     this.afterAction()
+  }
+
+  /** 令 source 二选一：弃两张手牌，或受 1 点创伤（拔矢啖睛） */
+  async choiceDiscardOrDamage(from, source, sk) {
+    if (source.hand.length >= 2) {
+      // 有两张牌可弃：AI 与玩家统一自动弃置（保命优先）
+      const drops = [source.hand[0], source.hand[1]]
+      for (const c of drops) this.dropCard(source, c)
+      this.log(`${source.label} 忍痛弃去两张手牌，避其锋芒。`, 'skill')
+      return
+    }
+    this.log(`${source.label} 无牌可弃，受 ${from.label}【${sk.name}】反噬，受 1 点创伤。`, 'skill')
+    source.hp -= 1
+    if (source.hp <= 0) await this.dying(source, from)
   }
 
   /** 濒死：依次询问求援 */
@@ -599,23 +754,30 @@ export class Game {
       const saver = this.state.seats[(target.idx + i) % n]
       // 濒死之人救不了自己，从下家开始依次询问
       if (!saver.alive || saver.idx === target.idx) continue
-      const heal = saver.hand.find((c) => c.key === 'heal')
+      // 刮骨：红色手牌也可当【援】
+      const heal = this.findHealCard(saver)
       if (!heal) continue
       let use = false
       if (saver.isAI) {
         use = aiAskSave(this, saver, target)
         if (use) {
-          const card = saver.hand.find((c) => c.key === 'heal')
+          const card = this.findHealCard(saver)
           this.removeHand(saver, card)
           this.state.discard.push(card)
           target.hp = 1
-          this.log(`${saver.label} 以【援】救下 ${target.label}，体力回到 1 点。`, 'good')
+          if (card.key !== 'heal') {
+            const sk = this.skillOf(saver, 'dying_heal_red')
+            this.log(`${saver.label} 发动【${sk.name}】，刮骨去毒，救下 ${target.label}，体力回到 1 点。`, 'good')
+          } else {
+            this.log(`${saver.label} 以【援】救下 ${target.label}，体力回到 1 点。`, 'good')
+          }
           return true
         }
       } else {
         this.state.pending = {
           kind: 'save',
           idx: saver.idx,
+          allowRed: this.hasEffect(saver, 'dying_heal_red'),
           text: `${target.label} 濒死，你是否出【援】相救？`
         }
         const action = await this.waitHuman()
@@ -626,7 +788,7 @@ export class Game {
             this.removeHand(saver, card)
             this.state.discard.push(card)
             target.hp = 1
-            this.log(`你以【援】救下 ${target.label}，体力回到 1 点。`, 'good')
+            this.log(`你以【${card.key === 'heal' ? '援' : '刮骨'}】救下 ${target.label}，体力回到 1 点。`, 'good')
             return true
           }
         }
@@ -636,9 +798,39 @@ export class Game {
     return false
   }
 
+  /** 可用于救人【援】的牌：普通【援】；刮骨加持下红牌也算 */
+  findHealCard(seat) {
+    if (!seat || !seat.hand || !seat.hand.length) return null
+    const plain = seat.hand.find((c) => c.key === 'heal')
+    if (plain) return plain
+    if (this.hasEffect(seat, 'dying_heal_red')) {
+      return seat.hand.find((c) => isRedCard(c))
+    }
+    return null
+  }
+
   async death(target, killer) {
     target.alive = false
     target.roleOpen = true
+
+    // 高平陵：司马懿可尽取阵亡者之物（自动发动，一局一次，纯收益）
+    const looter = this.state.seats.find(
+      (s) => s.alive && s.idx !== target.idx && !s.secretUsed && this.hasEffect(s, 'secret_loot')
+    )
+    if (looter) {
+      const loot = [...target.hand, ...Object.values(target.equip).filter(Boolean)]
+      looter.secretUsed = true
+      looter.hand.push(...loot)
+      target.hand = []
+      target.equip = { weapon: null, armor: null, minusHorse: null, plusHorse: null }
+      if (looter.hp < looter.maxHp) looter.hp += 1
+      const sk = this.skillOf(looter, 'secret_loot')
+      this.log(
+        `${looter.label} 发动秘计【${sk.name}】，尽收 ${target.label} 遗物${loot.length ? `（${loot.length} 张）` : ''}，声威大振！`,
+        'skill'
+      )
+    }
+
     // 手牌与装备进弃牌堆
     this.state.discard.push(...target.hand, ...Object.values(target.equip).filter(Boolean), ...target.traps)
     target.hand = []
@@ -695,8 +887,24 @@ export class Game {
 
   /* ==================== 技能 ==================== */
 
+  /**
+   * 该座位是否拥有某效果。
+   * 一名武将可有多个技能；常策类技能的 effect 允许是数组（如陆逊·谦冲）。
+   */
   hasEffect(seat, effect) {
-    return !!seat && seat.alive && seat.hero.skill.effect === effect
+    if (!seat || !seat.alive) return false
+    const list = seat.hero.skills || [seat.hero.skill]
+    return list.some(
+      (s) => (Array.isArray(s.effect) ? s.effect.includes(effect) : s.effect === effect)
+    )
+  }
+
+  /** 取拥有某效果的技能对象（用于日志取技能名） */
+  skillOf(seat, effect) {
+    const list = (seat && seat.hero.skills) || (seat && [seat.hero.skill]) || []
+    return list.find(
+      (s) => (Array.isArray(s.effect) ? s.effect.includes(effect) : s.effect === effect)
+    )
   }
 
   canBeSlash(seat, card) {
@@ -720,9 +928,20 @@ export class Game {
     return list
   }
 
-  /** 玩家/AI 发动主动技 */
+  /** 玩家/AI 发动主动技（多技能武将经 payload.skillEffect 指定是哪一个） */
   async useSkill(seat, payload = {}) {
-    const eff = seat.hero.skill.effect
+    const eff = payload.skillEffect || seat.hero.skill.effect
+    const sk = this.skillOf(seat, eff) || seat.hero.skill
+
+    // 秘计统一走 useSecretSkill（含袁绍·乱击这类以秘计为主技的武将）
+    const SECRET_EFFECTS = [
+      'aoe_damage', 'secret_unblockable', 'secret_rescue', 'secret_revive',
+      'secret_aoe_fire', 'secret_aoe_burn', 'secret_aoe_force'
+    ]
+    if (SECRET_EFFECTS.includes(eff)) {
+      return this.useSecretSkill(seat, { ...payload, skillEffect: eff })
+    }
+
     if (eff === 'draw1') {
       if (seat.onceUsed.draw1) {
         this.warn('【英姿】本回合已用过。')
@@ -730,7 +949,7 @@ export class Game {
       }
       seat.onceUsed.draw1 = true
       this.drawCards(seat, 1)
-      this.log(`${seat.label} 发动【${seat.hero.skill.name}】，摸一张牌。`, 'skill')
+      this.log(`${seat.label} 发动【${sk.name}】，摸一张牌。`, 'skill')
       return true
     }
     if (eff === 'balance') {
@@ -749,7 +968,158 @@ export class Game {
         if (card) this.dropCard(seat, card)
       }
       this.drawCards(seat, uids.length)
-      this.log(`${seat.label} 发动【${seat.hero.skill.name}】，弃 ${uids.length} 张换 ${uids.length} 张。`, 'skill')
+      this.log(`${seat.label} 发动【${sk.name}】，弃 ${uids.length} 张换 ${uids.length} 张。`, 'skill')
+      return true
+    }
+    if (eff === 'give_rende') {
+      // 仁德：弃两张手牌给一名其他角色，自己回复 1 点体力
+      if (seat.onceUsed.rende) {
+        this.warn('【仁德】本回合已用过。')
+        return false
+      }
+      const target = this.state.seats[payload.targetIdx]
+      if (!target || !target.alive || target.idx === seat.idx) {
+        this.warn('请选择一名其他角色。')
+        return false
+      }
+      const uids = payload.cardUids || []
+      const cost = (uids.length >= 2 ? uids.slice(0, 2) : seat.hand.slice(0, 2).map((c) => c.uid))
+        .map((u) => seat.hand.find((c) => c.uid === u))
+        .filter(Boolean)
+      if (cost.length < 2) {
+        this.warn('【仁德】需两张手牌。')
+        return false
+      }
+      seat.onceUsed.rende = true
+      for (const c of cost) {
+        this.removeHand(seat, c)
+        target.hand.push(c)
+      }
+      if (seat.hp < seat.maxHp) seat.hp += 1
+      this.log(`${seat.label} 发动【${sk.name}】，赠 ${target.label} 两张手牌，携民渡江，众望所归。`, 'skill')
+      return true
+    }
+    if (eff === 'ban_slash') {
+      // 挟天子：弃一张手牌，令一名其他角色下个用兵阶段不能出【击】
+      if (seat.onceUsed.banSlash) {
+        this.warn('【挟天子】本回合已用过。')
+        return false
+      }
+      const target = this.state.seats[payload.targetIdx]
+      if (!target || !target.alive || target.idx === seat.idx) {
+        this.warn('请选择一名其他角色。')
+        return false
+      }
+      if (!seat.hand.length) {
+        this.warn('手上无牌可弃。')
+        return false
+      }
+      seat.onceUsed.banSlash = true
+      const cost = seat.hand.find((c) => c.uid === payload.cardUid) || seat.hand[0]
+      this.dropCard(seat, cost)
+      target.slashBanned = true
+      this.log(`${seat.label} 发动【${sk.name}】，以朝廷诏命压制 ${target.label}，其下回合用兵不得出【击】。`, 'skill')
+      return true
+    }
+    if (eff === 'star_gaze') {
+      // 观星：弃一张手牌，摸一张牌并观看牌堆顶三张
+      if (seat.onceUsed.star) {
+        this.warn('【观星】本回合已用过。')
+        return false
+      }
+      if (!seat.hand.length) {
+        this.warn('手上无牌可弃。')
+        return false
+      }
+      seat.onceUsed.star = true
+      const cost = seat.hand.find((c) => c.uid === payload.cardUid) || seat.hand[0]
+      this.dropCard(seat, cost)
+      this.drawCards(seat, 1)
+      const top = this.state.deck.slice(0, 3)
+      this.log(
+        `${seat.label} 发动【${sk.name}】，夜观天象，来日之牌：${top.map((c) => `${cardName(c.key)}(${suitSymbol(c.suit)})`).join('、') || '牌堆已尽'}。`,
+        'skill'
+      )
+      return true
+    }
+    if (eff === 'heal_ally') {
+      // 联姻：弃两张手牌，与一名其他角色各回复 1 点体力
+      if (seat.onceUsed.lianyin) {
+        this.warn('【联姻】本回合已用过。')
+        return false
+      }
+      const target = this.state.seats[payload.targetIdx]
+      if (!target || !target.alive || target.idx === seat.idx) {
+        this.warn('请选择一名其他角色。')
+        return false
+      }
+      const uids = payload.cardUids || []
+      const cost = (uids.length >= 2 ? uids.slice(0, 2) : seat.hand.slice(0, 2).map((c) => c.uid))
+        .map((u) => seat.hand.find((c) => c.uid === u))
+        .filter(Boolean)
+      if (cost.length < 2) {
+        this.warn('【联姻】需两张手牌。')
+        return false
+      }
+      seat.onceUsed.lianyin = true
+      for (const c of cost) this.dropCard(seat, c)
+      if (target.hp < target.maxHp) target.hp += 1
+      if (seat.hp < seat.maxHp) seat.hp += 1
+      this.log(`${seat.label} 发动【${sk.name}】，与 ${target.label} 结秦晋之好，双方各回复 1 点体力。`, 'skill')
+      return true
+    }
+    if (eff === 'heal_skill') {
+      // 青囊：弃一张手牌，令一名已受伤的角色回复 1 点体力（每回合两次）
+      if ((seat.onceUsed.qingnang || 0) >= 2) {
+        this.warn('【青囊】本回合已用两次。')
+        return false
+      }
+      const target = this.state.seats[payload.targetIdx] || seat
+      if (!target || !target.alive || target.hp >= target.maxHp) {
+        this.warn('请选择一名已受伤的角色。')
+        return false
+      }
+      if (!seat.hand.length) {
+        this.warn('手上无牌可弃。')
+        return false
+      }
+      seat.onceUsed.qingnang = (seat.onceUsed.qingnang || 0) + 1
+      const cost = seat.hand.find((c) => c.uid === payload.cardUid) || seat.hand[0]
+      this.dropCard(seat, cost)
+      target.hp = Math.min(target.maxHp, target.hp + 1)
+      this.log(`${seat.label} 打开【${sk.name}】，妙手回春，${target.label} 回复 1 点体力。`, 'skill')
+      return true
+    }
+    if (eff === 'duel_two') {
+      // 离间：弃一张牌，令 A 对 B 出一张【击】，不出则 A 失去 1 点体力
+      if (seat.onceUsed.lijian) {
+        this.warn('【离间】本回合已用过。')
+        return false
+      }
+      const a = this.state.seats[payload.targetIdx]
+      const b = this.state.seats[payload.targetIdx2]
+      if (!a || !b || !a.alive || !b.alive || a.idx === seat.idx || b.idx === seat.idx || a.idx === b.idx) {
+        this.warn('请指定两名不同的其他角色。')
+        return false
+      }
+      if (!seat.hand.length) {
+        this.warn('手上无牌可弃。')
+        return false
+      }
+      seat.onceUsed.lijian = true
+      const cost = seat.hand.find((c) => c.uid === payload.cardUid) || seat.hand[0]
+      this.dropCard(seat, cost)
+      this.log(`${seat.label} 发动【${sk.name}】，巧言令色，行连环美人计！`, 'skill')
+      const slash = a.hand.find((c) => this.canBeSlash(a, c))
+      if (slash) {
+        this.removeHand(a, slash)
+        this.log(`${a.label} 中计，被迫对 ${b.label} 出一记【击】。`, 'warn')
+        await this.resolveSlash(a, b, slash)
+      } else {
+        this.log(`${a.label} 无【击】可出，怒火攻心，失去 1 点体力。`, 'hit')
+        a.hp -= 1
+        if (a.hp <= 0) await this.dying(a, seat)
+      }
       return true
     }
     if (eff === 'steal_card' || eff === 'force_discard') {
@@ -769,17 +1139,17 @@ export class Game {
       const cost = seat.hand.find((c) => c.uid === payload.cardUid) || seat.hand[0]
       this.dropCard(seat, cost)
       if (!target.hand.length) {
-        this.log(`${seat.label} 发动【${seat.hero.skill.name}】，然 ${target.label} 两手空空。`, 'skill')
+        this.log(`${seat.label} 发动【${sk.name}】，然 ${target.label} 两手空空。`, 'skill')
         return true
       }
       const i = Math.floor(Math.random() * target.hand.length)
       const card = target.hand.splice(i, 1)[0]
       if (eff === 'steal_card') {
         seat.hand.push(card)
-        this.log(`${seat.label} 发动【${seat.hero.skill.name}】，取得 ${target.label} 一张手牌。`, 'skill')
+        this.log(`${seat.label} 发动【${sk.name}】，取得 ${target.label} 一张手牌。`, 'skill')
       } else {
         this.state.discard.push(card)
-        this.log(`${seat.label} 发动【${seat.hero.skill.name}】，${target.label} 弃置一张手牌。`, 'skill')
+        this.log(`${seat.label} 发动【${sk.name}】，${target.label} 弃置一张手牌。`, 'skill')
       }
       return true
     }
@@ -792,14 +1162,31 @@ export class Game {
       this.dropCard(seat, cost)
       seat.boost = 1
       seat.onceUsed.boost = true
-      this.log(`${seat.label} 发动【${seat.hero.skill.name}】，本回合【击】的创伤 +1。`, 'skill')
+      this.log(`${seat.label} 发动【${sk.name}】，本回合【击】的创伤 +1。`, 'skill')
       return true
     }
+    this.warn('此技无需主动发动。')
+    return false
+  }
+
+  /**
+   * 秘计：一局一次的大招。
+   * 效果：aoe_damage 乱击 / secret_unblockable 单刀 / secret_rescue 单骑救主 /
+   *       secret_revive 七星 / secret_aoe_fire 火烧赤壁 / secret_aoe_burn 夷陵 / secret_aoe_force 辕门射戟
+   */
+  async useSecretSkill(seat, payload = {}) {
+    const eff = payload.skillEffect || (seat.hero.secret && seat.hero.secret.effect)
+    if (!eff) {
+      this.warn('此武将没有秘计。')
+      return false
+    }
+    const sk = this.skillOf(seat, eff) || seat.hero.secret
+    if (seat.secretUsed) {
+      this.warn(`【${sk.name}】一局只能发动一次。`)
+      return false
+    }
+
     if (eff === 'aoe_damage') {
-      if (seat.secretUsed) {
-        this.warn('【乱击】一局只能发动一次。')
-        return false
-      }
       if (seat.hand.length < 2) {
         this.warn('需弃两张手牌才能发动。')
         return false
@@ -808,13 +1195,148 @@ export class Game {
       const uids = (payload.cardUids || []).slice(0, 2)
       const cost = uids.length === 2 ? uids.map((u) => seat.hand.find((c) => c.uid === u)).filter(Boolean) : seat.hand.slice(0, 2)
       for (const c of cost) this.dropCard(seat, c)
-      this.log(`${seat.label} 发动秘计【${seat.hero.skill.name}】，箭雨倾泻！`, 'skill')
+      this.log(`${seat.label} 发动秘计【${sk.name}】，箭雨倾泻！`, 'skill')
       for (const other of this.state.seats) {
         if (other.alive && other.idx !== seat.idx) await this.damage(seat, other, 1, '乱击')
       }
       return true
     }
-    this.warn('此技无需主动发动。')
+    if (eff === 'secret_unblockable') {
+      // 单刀：弃一张牌，对范围内一名角色造成 1 点不可挡创伤
+      const target = this.state.seats[payload.targetIdx]
+      if (!target || !target.alive || !this.inReach(seat, target)) {
+        this.warn('请选择攻击范围内的一名角色。')
+        return false
+      }
+      if (!seat.hand.length) {
+        this.warn('手上无牌可弃。')
+        return false
+      }
+      seat.secretUsed = true
+      const cost = seat.hand.find((c) => c.uid === payload.cardUid) || seat.hand[0]
+      this.dropCard(seat, cost)
+      this.log(`${seat.label} 发动秘计【${sk.name}】，只身赴会，刀光无可回避！`, 'skill')
+      await this.damage(seat, target, 1, '单刀')
+      return true
+    }
+    if (eff === 'secret_rescue') {
+      // 单骑救主：弃所有手牌，令一名其他角色回复 1 点体力并摸 2 张牌
+      const target = this.state.seats[payload.targetIdx]
+      if (!target || !target.alive || target.idx === seat.idx) {
+        this.warn('请选择一名其他角色。')
+        return false
+      }
+      if (!seat.hand.length) {
+        this.warn('手上无牌，无法救主。')
+        return false
+      }
+      seat.secretUsed = true
+      const n = seat.hand.length
+      for (const c of seat.hand.slice()) this.dropCard(seat, c)
+      if (target.hp < target.maxHp) target.hp += 1
+      this.drawCards(target, 2)
+      this.log(`${seat.label} 发动秘计【${sk.name}】，弃 ${n} 张手牌，冲阵救出 ${target.label}！`, 'skill')
+      return true
+    }
+    if (eff === 'secret_revive') {
+      // 七星：体力不高于 1 时，弃所有牌，回复至 2 点并摸 2 张
+      if (seat.hp > 1) {
+        this.warn('【七星】只在体力不高于 1 点时方可禳星。')
+        return false
+      }
+      seat.secretUsed = true
+      for (const c of seat.hand.slice()) this.dropCard(seat, c)
+      for (const slot of Object.keys(seat.equip)) {
+        const eq = seat.equip[slot]
+        if (eq) {
+          this.state.discard.push(eq)
+          this.onEquipLost(seat)
+          seat.equip[slot] = null
+        }
+      }
+      seat.hp = 2
+      this.drawCards(seat, 2)
+      this.log(`${seat.label} 发动秘计【${sk.name}】，七星灯禳命，气若游丝而复起！`, 'skill')
+      return true
+    }
+    if (eff === 'secret_aoe_fire') {
+      // 火烧赤壁：弃一张红色手牌，对至多两名其他角色各造成 1 点不可挡创伤
+      const reds = seat.hand.filter((c) => isRedCard(c))
+      if (!reds.length) {
+        this.warn('需一张红色手牌。')
+        return false
+      }
+      const idxs = (payload.targetIdxs || [payload.targetIdx, payload.targetIdx2]).filter((i) => i != null).slice(0, 2)
+      const targets = idxs.map((i) => this.state.seats[i]).filter((t) => t && t.alive && t.idx !== seat.idx)
+      if (!targets.length) {
+        this.warn('请指定至多两名其他角色。')
+        return false
+      }
+      seat.secretUsed = true
+      const cost = reds.find((c) => c.uid === payload.cardUid) || reds[0]
+      this.dropCard(seat, cost)
+      this.log(`${seat.label} 发动秘计【${sk.name}】，东风既起，烈焰连船！`, 'skill')
+      for (const t of targets) await this.damage(seat, t, 1, '火烧赤壁')
+      return true
+    }
+    if (eff === 'secret_aoe_burn') {
+      // 夷陵：弃所有红色手牌，对至多三名其他角色各 1 伤并弃其一张装备
+      const reds = seat.hand.filter((c) => isRedCard(c))
+      if (!reds.length) {
+        this.warn('需红色手牌。')
+        return false
+      }
+      const idxs = (payload.targetIdxs || [payload.targetIdx, payload.targetIdx2, payload.targetIdx3]).filter((i) => i != null).slice(0, 3)
+      const targets = idxs.map((i) => this.state.seats[i]).filter((t) => t && t.alive && t.idx !== seat.idx)
+      if (!targets.length) {
+        this.warn('请指定至多三名其他角色。')
+        return false
+      }
+      seat.secretUsed = true
+      for (const c of reds) this.dropCard(seat, c)
+      this.log(`${seat.label} 发动秘计【${sk.name}】，火烧连营七百里！`, 'skill')
+      for (const t of targets) {
+        await this.damage(seat, t, 1, '夷陵')
+        if (t.alive) {
+          const slots = Object.keys(t.equip).filter((s) => t.equip[s])
+          if (slots.length) {
+            const slot = slots[Math.floor(Math.random() * slots.length)]
+            const eq = t.equip[slot]
+            t.equip[slot] = null
+            this.state.discard.push(eq)
+            this.onEquipLost(t)
+            this.log(`大火焚毁 ${t.label} 的【${cardName(eq.key)}】。`, 'warn')
+          }
+        }
+      }
+      return true
+    }
+    if (eff === 'secret_aoe_force') {
+      // 辕门射戟：弃一张【击】，其余角色各弃一张手牌或受 1 点创伤
+      const slash = seat.hand.find((c) => this.canBeSlash(seat, c))
+      if (!slash) {
+        this.warn('需一张【击】才能引弓立威。')
+        return false
+      }
+      seat.secretUsed = true
+      this.removeHand(seat, slash)
+      this.state.discard.push(slash)
+      this.log(`${seat.label} 发动秘计【${sk.name}】，一箭正中小支，诸将失色！`, 'skill')
+      for (const other of this.state.seats) {
+        if (!other.alive || other.idx === seat.idx) continue
+        if (other.hand.length) {
+          const i = Math.floor(Math.random() * other.hand.length)
+          const card = other.hand.splice(i, 1)[0]
+          this.state.discard.push(card)
+          this.log(`${other.label} 慑于天威，弃置一张手牌。`, 'skill')
+        } else {
+          this.log(`${other.label} 无牌可弃，受 1 点创伤。`, 'hit')
+          await this.damage(seat, other, 1, '辕门射戟')
+        }
+      }
+      return true
+    }
+    this.warn('此秘计暂不可发动。')
     return false
   }
 
@@ -864,6 +1386,7 @@ export class Game {
         if (this.kongCheng(t)) return false
       }
       if (key === 'trapSlash' && this.hasEffect(t, 'immune_steal')) return false
+      if (key === 'duel' && this.hasEffect(t, 'immune_duel')) return false
       return true
     })
   }

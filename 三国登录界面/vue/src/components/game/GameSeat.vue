@@ -1,6 +1,6 @@
 <script setup>
 import { computed } from 'vue'
-import { ROLES, EQUIPS, cardName } from '../../game/rules.js'
+import { ROLES, EQUIPS, SKILL_TYPES, cardName } from '../../game/rules.js'
 
 const props = defineProps({
   seat: { type: Object, required: true },
@@ -21,6 +21,16 @@ const hpDots = computed(() => {
   for (let i = 0; i < props.seat.maxHp; i++) arr.push(i < props.seat.hp)
   return arr
 })
+/** 全部技能：主技 + 其余技能（含秘计），悬停可看效果与典故 */
+const skills = computed(() => {
+  const h = props.seat.hero
+  return (h.skills && h.skills.length ? h.skills : [h.skill]).filter((s) => s.name && s.name !== '—')
+})
+function skillTip(s) {
+  let tip = s.desc || ''
+  if (s.allusion) tip += `\n【典故】${s.allusion}`
+  return tip
+}
 </script>
 
 <template>
@@ -57,9 +67,16 @@ const hpDots = computed(() => {
       <span v-for="e in equips" :key="e.slot" class="eq" :title="e.label">{{ e.name }}</span>
     </div>
 
-    <div class="skill" :title="seat.hero.skill.desc">
-      <span class="s-type">{{ seat.hero.skill.type }}</span>
-      <span class="s-name">{{ seat.hero.skill.name }}</span>
+    <div v-if="skills.length" class="skills">
+      <div
+        v-for="s in skills"
+        :key="s.name"
+        class="skill"
+        :title="skillTip(s)"
+      >
+        <span class="s-type" :style="{ background: (SKILL_TYPES[s.type] && SKILL_TYPES[s.type].color) + '22', color: SKILL_TYPES[s.type] ? SKILL_TYPES[s.type].color : 'var(--g-gold)' }">{{ s.type }}</span>
+        <span class="s-name">{{ s.name }}</span>
+      </div>
     </div>
   </div>
 </template>
@@ -193,14 +210,20 @@ const hpDots = computed(() => {
   color: #9dc0dd;
   font-size: 10px;
 }
-.skill {
+.skills {
   display: flex;
-  align-items: center;
-  gap: 4px;
+  flex-direction: column;
+  gap: 2px;
   margin-top: 5px;
   padding-top: 4px;
   border-top: 1px dashed var(--g-hair);
   font-size: 11px;
+}
+.skill {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: help;
 }
 .s-type {
   padding: 0 4px;

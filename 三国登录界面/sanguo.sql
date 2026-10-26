@@ -11,7 +11,7 @@
  Target Server Version : 80039 (8.0.39)
  File Encoding         : 65001
 
- Date: 23/10/2026 15:05:30
+ Date: 26/10/2026 10:01:34
 */
 
 SET NAMES utf8mb4;
@@ -31,7 +31,7 @@ CREATE TABLE `admin_user`  (
   `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE INDEX `uk_admin_username`(`username` ASC) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 2 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '后台管理账号表' ROW_FORMAT = Dynamic;
+) ENGINE = InnoDB AUTO_INCREMENT = 2 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '后台管理账号表' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Records of admin_user
@@ -60,16 +60,16 @@ CREATE TABLE `hero`  (
   PRIMARY KEY (`id`) USING BTREE,
   INDEX `idx_faction`(`faction` ASC) USING BTREE,
   INDEX `idx_type`(`type` ASC) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 27 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '英雄榜武将表' ROW_FORMAT = Dynamic;
+) ENGINE = InnoDB AUTO_INCREMENT = 31 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '英雄榜武将表' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Records of hero
 -- ----------------------------
-INSERT INTO `hero` VALUES (1, '曹操', '乱世奸雄', 'wei', '君主', '君主', '挟天子以令诸侯，横槊赋诗，气吞山河。', 72, 96, 1, 4, '挟主', '奇谋', '出牌阶段，弃一张手牌，命一名其他角色交出一张手牌');
-INSERT INTO `hero` VALUES (2, '夏侯惇', '独眼苍狼', 'wei', '猛将', '猛将', '拔矢啖睛，性烈如火，曹营第一先锋。', 88, 82, 2, 4, '刚烈', '应策', '你受到创伤后，可对伤害来源造成 1 点创伤');
+INSERT INTO `hero` VALUES (1, '曹操', '乱世奸雄', 'wei', '君主', '君主', '挟天子以令诸侯，横槊赋诗，气吞山河。', 72, 96, 1, 4, '收编', '应策', '你受到创伤后，获得伤害来源的一张手牌');
+INSERT INTO `hero` VALUES (2, '夏侯惇', '独眼苍狼', 'wei', '猛将', '猛将', '拔矢啖睛，性烈如火，曹营第一先锋。', 88, 82, 2, 4, '拔矢啖睛', '应策', '你受到【击】的创伤后，令来源弃两张手牌或受 1 点创伤');
 INSERT INTO `hero` VALUES (3, '张辽', '威震逍遥', 'wei', '统帅', '统帅', '八百破十万，威震逍遥津，江东小儿不敢夜啼。', 92, 95, 3, 4, '威震', '奇谋', '出牌阶段，弃一张手牌，令一名角色弃置一张手牌');
 INSERT INTO `hero` VALUES (4, '许褚', '虎痴', 'wei', '猛将', '猛将', '力能倒拖牛尾，裸衣斗马超，护卫中军不离半步。', 96, 68, 4, 4, '裸衣', '奇谋', '弃一张手牌，本回合你的【击】创伤 +1');
-INSERT INTO `hero` VALUES (5, '司马懿', '冢虎', 'wei', '军师', '军师', '鹰视狼顾，能忍者胜，终成三家归晋之基。', 63, 98, 5, 3, '反馈', '应策', '你受到创伤后，可获得伤害来源的一张手牌');
+INSERT INTO `hero` VALUES (5, '司马懿', '冢虎', 'wei', '军师', '军师', '鹰视狼顾，能忍者胜，终成三家归晋之基。', 63, 98, 5, 3, '鬼才', '应策', '任意角色的判定牌生效前，你可打出一张手牌代替之');
 INSERT INTO `hero` VALUES (6, '郭嘉', '鬼才', 'wei', '军师', '军师', '算无遗策，十胜十败定北疆，惜天不假年。', 45, 88, 6, 3, '遗计', '应策', '你受到创伤后，可摸两张牌');
 INSERT INTO `hero` VALUES (7, '关羽', '武圣', 'shu', '猛将', '猛将', '温酒斩华雄，过五关斩六将，义薄云天。', 97, 95, 7, 4, '武圣', '应策', '你可将任意一张手牌当作【击】使用');
 INSERT INTO `hero` VALUES (8, '张飞', '万人敌', 'shu', '猛将', '猛将', '当阳桥头一声断喝，独退曹家百万兵。', 98, 85, 8, 4, '咆哮', '奇谋', '出牌阶段，你可额外使用一张【击】');
@@ -79,14 +79,18 @@ INSERT INTO `hero` VALUES (11, '黄忠', '老当益壮', 'shu', '猛将', '猛�
 INSERT INTO `hero` VALUES (12, '诸葛亮', '卧龙', 'shu', '军师', '军师', '未出茅庐已知三分天下，鞠躬尽瘁死而后已。', 38, 95, 12, 3, '空城', '常策', '你没有手牌时，不能被【击】与【探囊】指定');
 INSERT INTO `hero` VALUES (13, '周瑜', '美周郎', 'wu', '军师', '军师', '赤壁一把火，烧尽曹军八十万，雄姿英发。', 71, 93, 13, 3, '英姿', '奇谋', '出牌阶段，你可摸一张牌（每回合限一次）');
 INSERT INTO `hero` VALUES (14, '吕蒙', '吴下阿蒙', 'wu', '统帅', '统帅', '士别三日刮目相看，白衣渡江取荆州。', 78, 91, 14, 4, '克己', '常策', '若本回合未使用过【击】，收兵阶段不必弃牌');
-INSERT INTO `hero` VALUES (15, '陆逊', '江东儒将', 'wu', '军师', '军师', '火烧连营七百里，书生亦可破枭雄。', 60, 94, 15, 3, '谦逊', '常策', '你不能成为【探囊】与【困局】的目标');
+INSERT INTO `hero` VALUES (15, '陆逊', '江东儒将', 'wu', '军师', '军师', '火烧连营七百里，书生亦可破枭雄。', 60, 94, 15, 3, '谦冲', '常策', '你不能成为【探囊】【困局】【惑敌】的目标；计略创伤 -1');
 INSERT INTO `hero` VALUES (16, '甘宁', '锦帆贼', 'wu', '猛将', '猛将', '百骑劫魏营，铃响处无人敢挡。', 94, 79, 16, 4, '奇袭', '奇谋', '你可将一张黑色手牌当作【探囊】使用');
 INSERT INTO `hero` VALUES (17, '太史慈', '神射', 'wu', '猛将', '猛将', '猿臂善射，箭无虚发，北海突围救孔融。', 92, 83, 17, 4, '神射', '应策', '你的【击】造成创伤后，你摸一张牌');
 INSERT INTO `hero` VALUES (18, '孙权', '碧眼儿', 'wu', '君主', '君主', '坐断东南战未休，生子当如孙仲谋。', 66, 89, 18, 4, '制衡', '奇谋', '弃置任意数量手牌，再摸等量的牌（每回合限一次）');
-INSERT INTO `hero` VALUES (19, '吕布', '飞将', 'han', '猛将', '猛将', '人中吕布，马中赤兔，方天画戟无人可挡。', 100, 87, 19, 5, '无双', '应策', '你的【击】需两张【挡】才能抵消');
+INSERT INTO `hero` VALUES (19, '吕布', '飞将', 'han', '猛将', '猛将', '人中吕布，马中赤兔，方天画戟无人可挡。', 100, 87, 19, 4, '无双', '应策', '你的【击】需两张【挡】才能抵消');
 INSERT INTO `hero` VALUES (20, '董卓', '西凉狼', 'han', '君主', '君主', '废立天子，焚毁洛阳，暴虐终致身死灯灭。', 87, 84, 20, 5, '暴虐', '应策', '你受到创伤后，摸一张牌');
 INSERT INTO `hero` VALUES (21, '袁绍', '四世三公', 'han', '君主', '君主', '门生故吏遍天下，可惜好谋无断。', 68, 86, 21, 4, '乱击', '秘计', '一局一次：弃两张手牌，对场上其他角色各造成 1 点创伤');
 INSERT INTO `hero` VALUES (22, '公孙瓒', '白马将军', 'han', '统帅', '统帅', '白马义从踏塞北，声名远震乌桓。', 84, 88, 22, 4, '白马', '常策', '你计算与其他角色的距离 -1');
+INSERT INTO `hero` VALUES (27, '刘备', '昭烈仁主', 'shu', '君主', '君主', '桃园结义得人死力，携民渡江而不弃，以仁德立于乱世。', 73, 88, 23, 5, '仁德', '奇谋', '出牌阶段限一次：弃两张手牌交给一名其他角色，你回复 1 点体力');
+INSERT INTO `hero` VALUES (28, '孙尚香', '弓腰姬', 'wu', '猛将', '猛将', '才捷刚猛有诸兄之风，侍婢百人皆执刀侍立。', 82, 75, 24, 3, '枭姬', '应策', '你失去装备区一张牌后，摸两张牌');
+INSERT INTO `hero` VALUES (29, '貂蝉', '闭月', 'han', '军师', '军师', '连环美人计离间董卓吕布，巾帼胜过十万兵。', 68, 70, 25, 3, '离间', '奇谋', '出牌阶段限一次：令两名其他角色互出【击】，不出者失去 1 点体力');
+INSERT INTO `hero` VALUES (30, '华佗', '神医', 'han', '军师', '军师', '刮骨疗毒，青囊济世，妙手回春医者仁心。', 40, 55, 26, 3, '青囊', '奇谋', '出牌阶段限两次：弃一张手牌，令一名已受伤角色回复 1 点体力');
 
 -- ----------------------------
 -- Table structure for news
@@ -98,7 +102,7 @@ CREATE TABLE `news`  (
   `category` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NULL DEFAULT NULL COMMENT '类别',
   `sort_order` int NULL DEFAULT 0 COMMENT '排序',
   PRIMARY KEY (`id`) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 9 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '烽火快报表' ROW_FORMAT = Dynamic;
+) ENGINE = InnoDB AUTO_INCREMENT = 9 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '烽火快报表' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Records of news
@@ -125,7 +129,7 @@ CREATE TABLE `recruit`  (
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE INDEX `uk_user_hero`(`user_id` ASC, `hero_id` ASC) USING BTREE,
   INDEX `idx_user`(`user_id` ASC) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 8 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '点将台招募记录表' ROW_FORMAT = Dynamic;
+) ENGINE = InnoDB AUTO_INCREMENT = 8 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '点将台招募记录表' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Records of recruit
@@ -149,7 +153,7 @@ CREATE TABLE `task`  (
   `category` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NULL DEFAULT NULL COMMENT '类别',
   `sort_order` int NULL DEFAULT 0 COMMENT '排序',
   PRIMARY KEY (`id`) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 9 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '军机要务表' ROW_FORMAT = Dynamic;
+) ENGINE = InnoDB AUTO_INCREMENT = 9 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '军机要务表' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Records of task
@@ -176,7 +180,7 @@ CREATE TABLE `user`  (
   `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE INDEX `uk_username`(`username` ASC) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 6 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '三国将军账号表' ROW_FORMAT = Dynamic;
+) ENGINE = InnoDB AUTO_INCREMENT = 6 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '三国将军账号表' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Records of user

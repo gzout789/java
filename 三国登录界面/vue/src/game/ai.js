@@ -177,11 +177,29 @@ function decideAction(game, seat) {
 }
 
 function skillAction(game, seat) {
-  const eff = seat.hero.skill.effect
+  const skills = seat.hero.skills || [seat.hero.skill]
+  for (const s of skills) {
+    if (Array.isArray(s.effect)) continue // 常策数组不主动
+    const action = aiActiveSkill(game, seat, s.effect)
+    if (action) return action
+  }
+  // 秘计单独考虑（一局一次，场面合适才放）
+  const secret = seat.hero.secret
+  if (secret && !seat.secretUsed && !Array.isArray(secret.effect)) {
+    const action = aiSecretSkill(game, seat, secret.effect)
+    if (action) return action
+  }
+  return null
+}
+
+/** 单个主动技的 AI 判断 */
+function aiActiveSkill(game, seat, eff) {
+  const enemies = rankTargets(game, seat)
+  const lord = lordSeat(game)
 
   if (eff === 'draw1' && !seat.onceUsed.draw1 && seat.hand.length < 4) {
     return async () => {
-      await game.useSkill(seat, {})
+      await game.useSkill(seat, { skillEffect: eff })
     }
   }
 
@@ -190,27 +208,18 @@ function skillAction(game, seat) {
     if (hasSlash) {
       const cost = seat.hand.find((c) => c.key !== 'slash' && c.key !== 'dodge') || seat.hand[0]
       return async () => {
-        await game.useSkill(seat, { cardUid: cost.uid })
+        await game.useSkill(seat, { skillEffect: eff, cardUid: cost.uid })
       }
     }
   }
 
   if (eff === 'steal_card' || eff === 'force_discard') {
     const targets = game.state.seats.filter((t) => t.alive && t.idx !== seat.idx && t.hand.length)
-    const victim = rankTargets(game, seat).find((t) => targets.includes(t))
+    const victim = enemies.find((t) => targets.includes(t))
     if (victim && seat.hand.length >= 2) {
       const cost = seat.hand.find((c) => c.key !== 'dodge') || seat.hand[0]
       return async () => {
-        await game.useSkill(seat, { targetIdx: victim.idx, cardUid: cost.uid })
-      }
-    }
-  }
-
-  if (eff === 'aoe_damage' && !seat.secretUsed && seat.hand.length >= 4) {
-    const alive = game.state.seats.filter((s) => s.alive).length
-    if (alive <= 4) {
-      return async () => {
-        await game.useSkill(seat, { cardUids: seat.hand.slice(0, 2).map((c) => c.uid) })
+        await game.useSkill(seat, { skillEffect: eff, targetIdx: victim.idx, cardUid: cost.uid })
       }
     }
   }
@@ -221,11 +230,129 @@ function skillAction(game, seat) {
     if (useful.length === 0) {
       const uids = seat.hand.slice(0, Math.min(2, seat.hand.length)).map((c) => c.uid)
       return async () => {
-        await game.useSkill(seat, { cardUids: uids })
+        await game.useSkill(seat, { skillEffect: eff, cardUids: uids })
       }
     }
   }
 
+  // 挟天子：压制威胁最高的敌人
+  if (eff === 'ban_slash' && !seat.onceUsed.banSlash && seat.hand.length >= 2) {
+    const victim = enemies[0]
+    if (victim) {
+      const cost = seat.hand.find((c) => c.key !== 'slash' && c.key !== 'dodge') || seat.hand[0]
+      return async () => {
+        await game.useSkill(seat, { skillEffect: eff, targetIdx: victim.idx, cardUid: cost.uid })
+      }
+    }
+  }
+
+  // 仁德：手牌富余时优先济主公
+  if (eff === 'give_rende' && !seat.onceUsed.rende && seat.hand.length >= 4) {
+    const donee = lord && lord.alive && lord.idx !== seat.idx ? lord : null
+    if (donee) {
+      return async () => {
+        await game.useSkill(seat, { skillEffect: eff, targetIdx: donee.idx, cardUids: seat.hand.slice(0, 2).map((c) => c.uid) })
+      }
+    }
+  }
+
+  // 观星：手牌多时换牌知天时
+  if (eff === 'star_gaze' && !seat.onceUsed.star && seat.hand.length >= 3) {
+    const cost = seat.hand.find((c) => c.key !== 'slash' && c.key !== 'dodge' && c.key !== 'heal') || seat.hand[0]
+    return async () => {
+      await game.useSkill(seat, { skillEffect: eff, cardUid: cost.uid })
+    }
+  }
+
+  // 联姻：自己受伤时，与一名其他角色各回一口
+  if (eff === 'heal_ally' && !seat.onceUsed.lianyin && seat.hand.length >= 2 && seat.hp < seat.maxHp) {
+    const partner = game.state.seats.find((t) => t.alive && t.idx !== seat.idx)
+    if (partner) {
+      return async () => {
+        await game.useSkill(seat, { skillEffect: eff, targetIdx: partner.idx, cardUids: seat.hand.slice(0, 2).map((c) => c.uid) })
+      }
+    }
+  }
+
+  // 青囊：优先救受伤的汉主，其次自己
+  if (eff === 'heal_skill' && (seat.onceUsed.qingnang || 0) < 2 && seat.hand.length >= 2) {
+    const patient =
+      lord && lord.alive && lord.idx !== seat.idx && lord.hp < lord.maxHp ? lord : seat.hp < seat.maxHp ? seat : null
+    if (patient) {
+      const cost = seat.hand.find((c) => c.key !== 'heal' && c.key !== 'dodge') || seat.hand[0]
+      return async () => {
+        await game.useSkill(seat, { skillEffect: eff, targetIdx: patient.idx, cardUid: cost.uid })
+      }
+    }
+  }
+
+  // 离间：令两个敌人自相残杀
+  if (eff === 'duel_two' && !seat.onceUsed.lijian && seat.hand.length >= 3) {
+    const a = enemies[0]
+    const b = enemies[1]
+    if (a && b) {
+      const cost = seat.hand.find((c) => c.key !== 'slash' && c.key !== 'dodge') || seat.hand[0]
+      return async () => {
+        await game.useSkill(seat, { skillEffect: eff, targetIdx: a.idx, targetIdx2: b.idx, cardUid: cost.uid })
+      }
+    }
+  }
+
+  return null
+}
+
+/** 秘计的 AI 判断（一局一次，选时机） */
+function aiSecretSkill(game, seat, eff) {
+  const enemies = rankTargets(game, seat)
+
+  if (eff === 'aoe_damage' && !seat.secretUsed && seat.hand.length >= 4) {
+    const alive = game.state.seats.filter((s) => s.alive).length
+    if (alive <= 4) {
+      return async () => {
+        await game.useSkill(seat, { skillEffect: eff, cardUids: seat.hand.slice(0, 2).map((c) => c.uid) })
+      }
+    }
+  }
+  if (eff === 'secret_unblockable') {
+    const victim = enemies.find((t) => game.inReach(seat, t))
+    if (victim && seat.hand.length >= 1) {
+      const cost = seat.hand.find((c) => c.key !== 'dodge' && c.key !== 'heal') || seat.hand[0]
+      return async () => {
+        await game.useSecretSkill(seat, { skillEffect: eff, targetIdx: victim.idx, cardUid: cost.uid })
+      }
+    }
+  }
+  if (eff === 'secret_aoe_fire') {
+    const hasRed = seat.hand.some((c) => ['heart', 'diamond'].includes(c.suit))
+    if (hasRed && enemies.length >= 2) {
+      return async () => {
+        await game.useSecretSkill(seat, { skillEffect: eff, targetIdx: enemies[0].idx, targetIdx2: enemies[1].idx })
+      }
+    }
+  }
+  if (eff === 'secret_aoe_burn') {
+    const hasRed = seat.hand.some((c) => ['heart', 'diamond'].includes(c.suit))
+    if (hasRed && enemies.length >= 2 && seat.hand.length >= 3) {
+      const t = enemies.slice(0, 3).map((x) => x.idx)
+      return async () => {
+        await game.useSecretSkill(seat, { skillEffect: eff, targetIdx: t[0], targetIdx2: t[1], targetIdx3: t[2] })
+      }
+    }
+  }
+  if (eff === 'secret_aoe_force') {
+    const alive = game.state.seats.filter((s) => s.alive && s.idx !== seat.idx).length
+    if (alive >= 2 && seat.hand.some((c) => game.canBeSlash(seat, c)) && seat.hand.length >= 2) {
+      return async () => {
+        await game.useSecretSkill(seat, { skillEffect: eff })
+      }
+    }
+  }
+  if (eff === 'secret_revive' && seat.hp <= 1 && (seat.hand.length || Object.values(seat.equip).some(Boolean))) {
+    return async () => {
+      await game.useSecretSkill(seat, { skillEffect: eff })
+    }
+  }
+  // secret_rescue（单骑救主）AI 暂不使用，留给玩家绝境翻盘
   return null
 }
 

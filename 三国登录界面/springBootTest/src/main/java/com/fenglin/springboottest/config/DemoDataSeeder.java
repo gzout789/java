@@ -68,31 +68,38 @@ public class DemoDataSeeder implements ApplicationRunner {
     private static final Map<String, String[]> HERO_SKILLS = new LinkedHashMap<>();
 
     static {
-        HERO_SKILLS.put("曹操", new String[]{"4", "挟主", "奇谋", "出牌阶段，弃一张手牌，命一名其他角色交出一张手牌"});
-        HERO_SKILLS.put("夏侯惇", new String[]{"4", "刚烈", "应策", "你受到创伤后，可对伤害来源造成 1 点创伤"});
+        HERO_SKILLS.put("刘备", new String[]{"5", "仁德", "奇谋", "出牌阶段限一次：弃两张手牌交给一名其他角色，你回复 1 点体力"});
+        HERO_SKILLS.put("曹操", new String[]{"4", "收编", "应策", "你受到创伤后，获得伤害来源的一张手牌"});
+        HERO_SKILLS.put("夏侯惇", new String[]{"4", "拔矢啖睛", "应策", "你受到【击】的创伤后，令来源弃两张手牌或受 1 点创伤"});
         HERO_SKILLS.put("张辽", new String[]{"4", "威震", "奇谋", "出牌阶段，弃一张手牌，令一名角色弃置一张手牌"});
         HERO_SKILLS.put("许褚", new String[]{"4", "裸衣", "奇谋", "弃一张手牌，本回合你的【击】创伤 +1"});
-        HERO_SKILLS.put("司马懿", new String[]{"3", "反馈", "应策", "你受到创伤后，可获得伤害来源的一张手牌"});
-        HERO_SKILLS.put("郭嘉", new String[]{"3", "遗计", "应策", "你受到创伤后，可摸两张牌"});
-        HERO_SKILLS.put("关羽", new String[]{"4", "武圣", "应策", "你可将任意一张手牌当作【击】使用"});
+        HERO_SKILLS.put("司马懿", new String[]{"3", "鬼才", "应策", "任意角色的判定牌生效前，你可打出一张手牌代替之"});
+        HERO_SKILLS.put("郭嘉", new String[]{"3", "遗计", "应策", "你受到创伤后，摸两张牌"});
+        HERO_SKILLS.put("关羽", new String[]{"4", "武圣", "应策", "你可将任意一张手牌当作【击】使用；红色牌当【击】需两张【挡】"});
         HERO_SKILLS.put("张飞", new String[]{"4", "咆哮", "奇谋", "出牌阶段，你可额外使用一张【击】"});
         HERO_SKILLS.put("赵云", new String[]{"4", "龙胆", "应策", "你可将【挡】当【击】、【击】当【挡】使用"});
         HERO_SKILLS.put("马超", new String[]{"4", "铁骑", "常策", "你计算攻击距离时无视目标的坚驹"});
         HERO_SKILLS.put("黄忠", new String[]{"4", "烈弓", "常策", "你的攻击距离 +1"});
         HERO_SKILLS.put("诸葛亮", new String[]{"3", "空城", "常策", "你没有手牌时，不能被【击】与【探囊】指定"});
-        HERO_SKILLS.put("周瑜", new String[]{"3", "英姿", "奇谋", "出牌阶段，你可摸一张牌（每回合限一次）"});
+        HERO_SKILLS.put("周瑜", new String[]{"3", "英姿", "奇谋", "出牌阶段限一次：你摸一张牌"});
+        HERO_SKILLS.put("孙尚香", new String[]{"3", "枭姬", "应策", "你失去装备区一张牌后，摸两张牌"});
         HERO_SKILLS.put("吕蒙", new String[]{"4", "克己", "常策", "若本回合未使用过【击】，收兵阶段不必弃牌"});
-        HERO_SKILLS.put("陆逊", new String[]{"3", "谦逊", "常策", "你不能成为【探囊】与【困局】的目标"});
+        HERO_SKILLS.put("陆逊", new String[]{"3", "谦冲", "常策", "你不能成为【探囊】【困局】【惑敌】的目标；计略创伤 -1"});
         HERO_SKILLS.put("甘宁", new String[]{"4", "奇袭", "奇谋", "你可将一张黑色手牌当作【探囊】使用"});
         HERO_SKILLS.put("太史慈", new String[]{"4", "神射", "应策", "你的【击】造成创伤后，你摸一张牌"});
         HERO_SKILLS.put("孙权", new String[]{"4", "制衡", "奇谋", "弃置任意数量手牌，再摸等量的牌（每回合限一次）"});
-        HERO_SKILLS.put("吕布", new String[]{"5", "无双", "应策", "你的【击】需两张【挡】才能抵消"});
+        HERO_SKILLS.put("吕布", new String[]{"4", "无双", "应策", "你的【击】需两张【挡】才能抵消"});
+        HERO_SKILLS.put("貂蝉", new String[]{"3", "离间", "奇谋", "出牌阶段限一次：令两名其他角色互出【击】，不出者失去 1 点体力"});
+        HERO_SKILLS.put("华佗", new String[]{"3", "青囊", "奇谋", "出牌阶段限两次：弃一张手牌，令一名已受伤角色回复 1 点体力"});
         HERO_SKILLS.put("董卓", new String[]{"5", "暴虐", "应策", "你受到创伤后，摸一张牌"});
         HERO_SKILLS.put("袁绍", new String[]{"4", "乱击", "秘计", "一局一次：弃两张手牌，对场上其他角色各造成 1 点创伤"});
         HERO_SKILLS.put("公孙瓒", new String[]{"4", "白马", "常策", "你计算与其他角色的距离 -1"});
     }
 
-    /** 给还没有武将技的武将补上体力与技能（老库升级、新库播种都走这里） */
+    /**
+     * 给武将补上体力与技能（老库升级、新库播种都走这里）。
+     * 空缺则补；与图鉴不符则同步为最新文案（如无技能不覆盖，尊重后台改名）。
+     */
     private void enrichHeroSkills() {
         List<Hero> heroes = heroMapper.selectList(null);
         int filled = 0;
@@ -110,8 +117,20 @@ public class DemoDataSeeder implements ApplicationRunner {
             if (hero.getHp() == null) {
                 patch.setHp(Integer.valueOf(skill[0]));
                 dirty = true;
+            } else if (LEGACY_HPS.containsKey(hero.getName())
+                    && LEGACY_HPS.get(hero.getName()).equals(hero.getHp())
+                    && hero.getHp() != Integer.parseInt(skill[0])) {
+                // 老版本出厂体力（如吕布旧版 5），同步为最新图鉴值
+                patch.setHp(Integer.valueOf(skill[0]));
+                dirty = true;
             }
             if (hero.getSkillName() == null || hero.getSkillName().isEmpty()) {
+                patch.setSkillName(skill[1]);
+                patch.setSkillType(skill[2]);
+                patch.setSkillDesc(skill[3]);
+                dirty = true;
+            } else if (!skill[1].equals(hero.getSkillName()) && !isCustomized(hero, skill)) {
+                // 与图鉴不同的旧文案（如"挟主"），同步为最新典故版
                 patch.setSkillName(skill[1]);
                 patch.setSkillType(skill[2]);
                 patch.setSkillDesc(skill[3]);
@@ -123,8 +142,31 @@ public class DemoDataSeeder implements ApplicationRunner {
             }
         }
         if (filled > 0) {
-            log.info("已为 {} 位武将补入体力与武将技", filled);
+            log.info("已为 {} 位武将补入/同步体力与武将技", filled);
         }
+    }
+
+    /** 后台改过 desc 且不等于任何已知默认值时，视为管理员自定义，不做同步 */
+    private boolean isCustomized(Hero hero, String[] skill) {
+        String desc = hero.getSkillDesc();
+        return desc != null && !desc.isEmpty() && !desc.equals(skill[3]) && !LEGACY_SKILL_DESCS.contains(desc);
+    }
+
+    /** 历史版本默认文案（改版前的出厂值），命中则允许被同步覆盖 */
+    private static final java.util.Set<String> LEGACY_SKILL_DESCS = new java.util.HashSet<>(java.util.Arrays.asList(
+            "出牌阶段，弃一张手牌，命一名其他角色交出一张手牌",
+            "你受到创伤后，可对伤害来源造成 1 点创伤",
+            "你受到创伤后，可获得伤害来源的一张手牌",
+            "你可将任意一张手牌当作【击】使用",
+            "出牌阶段，你可摸一张牌（每回合限一次）",
+            "你不能成为【探囊】与【困局】的目标"
+    ));
+
+    /** 老版本出厂体力（仅这些值允许被同步为最新图鉴体力） */
+    private static final Map<String, Integer> LEGACY_HPS = new LinkedHashMap<>();
+
+    static {
+        LEGACY_HPS.put("吕布", 5);
     }
 
     /** 后台管理账号：admin / admin123（只建一次，改过密码不会被覆盖） */
@@ -167,49 +209,67 @@ public class DemoDataSeeder implements ApplicationRunner {
     }
 
     private void seedHeroes() {
-        if (heroMapper.selectCount(null) > 0) {
-            return;
-        }
         // 名号, 称号, 阵营, 类型, 武力, 统率, 小传
         String[][] data = {
+                {"刘备", "昭烈仁主", "shu", "君主", "73", "88", "桃园结义得人死力，携民渡江而不弃，以仁德立于乱世。"},
                 {"曹操", "乱世奸雄", "wei", "君主", "72", "96", "挟天子以令诸侯，横槊赋诗，气吞山河。"},
                 {"夏侯惇", "独眼苍狼", "wei", "猛将", "88", "82", "拔矢啖睛，性烈如火，曹营第一先锋。"},
                 {"张辽", "威震逍遥", "wei", "统帅", "92", "95", "八百破十万，威震逍遥津，江东小儿不敢夜啼。"},
                 {"许褚", "虎痴", "wei", "猛将", "96", "68", "力能倒拖牛尾，裸衣斗马超，护卫中军不离半步。"},
                 {"司马懿", "冢虎", "wei", "军师", "63", "98", "鹰视狼顾，能忍者胜，终成三家归晋之基。"},
                 {"郭嘉", "鬼才", "wei", "军师", "45", "88", "算无遗策，十胜十败定北疆，惜天不假年。"},
-                {"关羽", "武圣", "shu", "猛将", "97", "95", "温酒斩华雄，过五关斩六将，义薄云天。"},
+                {"关羽", "武圣", "shu", "猛将", "97", "95", "白马刺良于万众之中，单刀赴会，义薄云天。"},
                 {"张飞", "万人敌", "shu", "猛将", "98", "85", "当阳桥头一声断喝，独退曹家百万兵。"},
                 {"赵云", "常山虎将", "shu", "猛将", "96", "91", "长坂坡七进七出，一身是胆，护主周全。"},
                 {"马超", "锦马超", "shu", "猛将", "97", "88", "西凉铁骑之子，杀得曹操割须弃袍。"},
                 {"黄忠", "老当益壮", "shu", "猛将", "93", "86", "定军山一箭斩夏侯，年近七旬仍开三石之弓。"},
                 {"诸葛亮", "卧龙", "shu", "军师", "38", "95", "未出茅庐已知三分天下，鞠躬尽瘁死而后已。"},
                 {"周瑜", "美周郎", "wu", "军师", "71", "93", "赤壁一把火，烧尽曹军八十万，雄姿英发。"},
+                {"孙尚香", "弓腰姬", "wu", "猛将", "82", "75", "才捷刚猛有诸兄之风，侍婢百人皆执刀侍立。"},
                 {"吕蒙", "吴下阿蒙", "wu", "统帅", "78", "91", "士别三日刮目相看，白衣渡江取荆州。"},
                 {"陆逊", "江东儒将", "wu", "军师", "60", "94", "火烧连营七百里，书生亦可破枭雄。"},
                 {"甘宁", "锦帆贼", "wu", "猛将", "94", "79", "百骑劫魏营，铃响处无人敢挡。"},
                 {"太史慈", "神射", "wu", "猛将", "92", "83", "猿臂善射，箭无虚发，北海突围救孔融。"},
                 {"孙权", "碧眼儿", "wu", "君主", "66", "89", "坐断东南战未休，生子当如孙仲谋。"},
-                {"吕布", "飞将", "han", "猛将", "100", "87", "人中吕布，马中赤兔，方天画戟无人可挡。"},
+                {"吕布", "飞将", "han", "猛将", "100", "87", "辕门射戟解斗，人中吕布，马中赤兔。"},
+                {"貂蝉", "闭月", "han", "军师", "68", "70", "连环美人计离间董卓吕布，巾帼胜过十万兵。"},
+                {"华佗", "神医", "han", "军师", "40", "55", "刮骨疗毒，青囊济世，妙手回春医者仁心。"},
                 {"董卓", "西凉狼", "han", "君主", "87", "84", "废立天子，焚毁洛阳，暴虐终致身死灯灭。"},
                 {"袁绍", "四世三公", "han", "君主", "68", "86", "门生故吏遍天下，可惜好谋无断。"},
                 {"公孙瓒", "白马将军", "han", "统帅", "84", "88", "白马义从踏塞北，声名远震乌桓。"}
         };
+        boolean empty = heroMapper.selectCount(null) == 0;
+        int inserted = 0;
         int sort = 1;
-        for (String[] row : data) {
-            Hero hero = new Hero();
-            hero.setName(row[0]);
-            hero.setEpithet(row[1]);
-            hero.setFaction(row[2]);
-            hero.setType(row[3]);
-            hero.setTypeName(row[3]);
-            hero.setPower(Integer.valueOf(row[4]));
-            hero.setLeadership(Integer.valueOf(row[5]));
-            hero.setDescription(row[6]);
-            hero.setSortOrder(sort++);
-            heroMapper.insert(hero);
+        // 已在库中的武将名（按名去重，老库也能补种新武将）
+        java.util.Set<String> existing = new java.util.HashSet<>();
+        if (!empty) {
+            for (Hero h : heroMapper.selectList(null)) {
+                if (h.getName() != null) {
+                    existing.add(h.getName());
+                }
+            }
+            sort = existing.size() + 1;
         }
-        log.info("已播种英雄榜 {} 位武将", data.length);
+        for (String[] row : data) {
+            if (empty || !existing.contains(row[0])) {
+                Hero hero = new Hero();
+                hero.setName(row[0]);
+                hero.setEpithet(row[1]);
+                hero.setFaction(row[2]);
+                hero.setType(row[3]);
+                hero.setTypeName(row[3]);
+                hero.setPower(Integer.valueOf(row[4]));
+                hero.setLeadership(Integer.valueOf(row[5]));
+                hero.setDescription(row[6]);
+                hero.setSortOrder(sort++);
+                heroMapper.insert(hero);
+                inserted++;
+            }
+        }
+        if (inserted > 0) {
+            log.info("英雄榜播种/补种 {} 位武将（含刘备、孙尚香、貂蝉、华佗）", inserted);
+        }
     }
 
     private void seedTasks() {

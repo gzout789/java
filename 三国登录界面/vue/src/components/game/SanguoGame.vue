@@ -23,6 +23,7 @@ const logBox = ref(null)
 const selectedUid = ref(null)
 const selecting = ref(null) // { card, as, candidates }
 const skillMode = ref(null) // { eff, need, count, picked }
+const skillMenu = ref(false) // 多技能武将的技能菜单
 const discardPick = ref([])
 const toastText = ref('')
 let toastTimer = null
@@ -79,6 +80,7 @@ function resetUI() {
   selectedUid.value = null
   selecting.value = null
   skillMode.value = null
+  skillMenu.value = false
   discardPick.value = []
 }
 
@@ -112,7 +114,10 @@ function onHandCard(card) {
   // 响应阶段：直接把牌交出去
   if (p && p.idx === 0) {
     if (p.kind === 'dodge' && g.canBeDodge(me.value, card)) return respond('dodge', card.uid)
-    if (p.kind === 'save' && card.key === 'heal') return respond('save', card.uid)
+    if (p.kind === 'save' && (card.key === 'heal' || (p.allowRed && ['heart', 'diamond'].includes(card.suit)))) {
+      return respond('save', card.uid)
+    }
+    if (p.kind === 'judgeSwap') return respond('judgeSwap', card.uid)
     if (p.kind === 'negate' && card.key === 'negate') return respond('negate', card.uid)
     if (p.kind === 'duel' && g.canBeSlash(me.value, card)) return respond('duelSlash', card.uid)
     return
@@ -182,6 +187,7 @@ function cancelSelect() {
   selecting.value = null
   selectedUid.value = null
   skillMode.value = null
+  skillMenu.value = false
 }
 
 function onSeatClick(seat) {
@@ -194,40 +200,160 @@ function onSeatClick(seat) {
     g.useCard(me.value, card, seat.idx, as)
     return
   }
-  if (skillMode.value && skillMode.value.need === 'target') {
-    g.useSkill(me.value, { targetIdx: seat.idx })
+  const m = skillMode.value
+  if (m && m.need === 'target') {
+    if (!seat.alive) return
+    if (seat.idx === 0 && !m.self) return
+    if (m.eff === 'secret_unblockable' && !g.inReach(me.value, seat)) {
+      return toast('超出攻击范围')
+    }
+    if (m.multi) {
+      const idxs = m.pickedSeats || (m.pickedSeats = [])
+      const i = idxs.indexOf(seat.idx)
+      if (i >= 0) idxs.splice(i, 1)
+      else idxs.push(seat.idx)
+      if (idxs.length >= m.multi) {
+        const payload = {
+          targetIdx: idxs[0],
+          targetIdx2: idxs[1],
+          targetIdx3: idxs[2]
+        }
+        const eff = m.eff
+        const secret = m.secret
+        skillMode.value = null
+        if (secret) g.useSecretSkill(me.value, { skillEffect: eff, ...payload })
+        else g.useSkill(me.value, { skillEffect: eff, ...payload })
+      }
+      return
+    }
+    const payload = { targetIdx: seat.idx }
+    if (m.cardUids) payload.cardUids = m.cardUids
+    const eff = m.eff
+    const secret = m.secret
     skillMode.value = null
+    if (secret) g.useSecretSkill(me.value, { skillEffect: eff, ...payload })
+    else g.useSkill(me.value, { skillEffect: eff, ...payload })
   }
 }
 
 /* ==================== 技能 ==================== */
 
-const ACTIVE_SKILLS = ['draw1', 'balance', 'steal_card', 'force_discard', 'slash_boost', 'aoe_damage']
+const ACTIVE_SKILLS = [
+  'draw1', 'balance', 'steal_card', 'force_discard', 'slash_boost', 'aoe_damage',
+  'give_rende', 'ban_slash', 'star_gaze', 'heal_ally', 'heal_skill', 'duel_two'
+]
 
-const skillUsable = computed(() => {
-  if (!me.value || !myTurn.value || st.value.stage !== 'play') return false
-  return ACTIVE_SKILLS.includes(me.value.hero.skill.effect)
+/** 我可主动发动的技能（含秘计） */
+const myActives = computed(() => {
+  if (!me.value) return []
+  const list = me.value.hero.skills || [me.value.hero.skill]
+  return list.filter((s) => !Array.isArray(s.effect) && ACTIVE_SKILLS.includes(s.effect))
 })
 
-function triggerSkill() {
-  const eff = me.value.hero.skill.effect
-  if (eff === 'draw1' || eff === 'aoe_damage') {
-    game.value.useSkill(me.value, {})
+/** 我的秘计（一局一次） */
+const mySecret = computed(() => {
+  if (!me.value || me.value.secretUsed) return null
+  const s = me.value.hero.secret
+  if (!s || !s.effect) return null
+  return s
+})
+
+/** 需要选目标的技能 → 目标候选 */
+function skillTargetsOf(eff) {
+  const g = game.value
+  const alive = st.value.seats.filter((s) => s.alive && s.idx !== 0)
+  if (eff === 'heal_skill') {
+    // 青囊可救自己
+    return st.value.seats.filter((s) => s.alive && s.hp < s.maxHp)
+  }
+  if (eff === 'secret_unblockable') {
+    return alive.filter((s) => g.inReach(me.value, s))
+  }
+  return alive
+}
+
+/** 发动一个技能：先校验，再进入对应的选牌/选人流程 */
+function triggerSkill(eff) {
+  const g = game.value
+  const h = me.value.hand.length
+  skillMenu.value = null
+  if (eff === 'draw1') return g.useSkill(me.value, { skillEffect: eff })
+  if (eff === 'aoe_damage') {
+    if (h < 2) return toast('需弃两张手牌才能发动')
+    skillMode.value = { eff, need: 'cards', count: 2, picked: [] }
     return
   }
-  if (eff === 'slash_boost') {
-    if (me.value.hand.length < 1) return toast('手上无牌可弃')
+  if (eff === 'slash_boost' || eff === 'star_gaze') {
+    if (h < 1) return toast('手上无牌可弃')
     skillMode.value = { eff, need: 'cards', count: 1, picked: [] }
     return
   }
   if (eff === 'balance') {
-    if (me.value.hand.length < 1) return toast('手上无牌可弃')
+    if (h < 1) return toast('手上无牌可弃')
     skillMode.value = { eff, need: 'cards', count: 0, picked: [] }
     return
   }
-  if (eff === 'steal_card' || eff === 'force_discard') {
-    if (me.value.hand.length < 1) return toast('需弃一张手牌才能发动')
+  if (eff === 'give_rende' || eff === 'heal_ally') {
+    if (h < 2) return toast('需两张手牌')
+    skillMode.value = { eff, need: 'cards', count: 2, picked: [], then: 'target' }
+    return
+  }
+  if (eff === 'ban_slash') {
+    if (h < 1) return toast('需弃一张手牌才能发动')
     skillMode.value = { eff, need: 'target', picked: [] }
+    return
+  }
+  if (eff === 'steal_card' || eff === 'force_discard') {
+    if (h < 1) return toast('需弃一张手牌才能发动')
+    skillMode.value = { eff, need: 'target', picked: [] }
+    return
+  }
+  if (eff === 'heal_skill') {
+    const cands = skillTargetsOf(eff)
+    if (!cands.length) return toast('没有已受伤的角色')
+    if (cands.length === 1 && h >= 1) {
+      skillMode.value = null
+      return g.useSkill(me.value, { skillEffect: eff, targetIdx: cands[0].idx })
+    }
+    if (h < 1) return toast('手上无牌可弃')
+    skillMode.value = { eff, need: 'target', self: true, picked: [] }
+    return
+  }
+  if (eff === 'duel_two') {
+    if (h < 1) return toast('需弃一张牌才能发动')
+    skillMode.value = { eff, need: 'target', multi: 2, pickedSeats: [], picked: [] }
+    return
+  }
+}
+
+/** 发动秘计 */
+function triggerSecret() {
+  const g = game.value
+  const eff = mySecret.value.effect
+  skillMenu.value = null
+  if (eff === 'secret_revive') {
+    if (me.value.hp > 1) return toast('【七星】只在体力不高于 1 点时方可禳星')
+    return g.useSecretSkill(me.value, { skillEffect: eff })
+  }
+  if (eff === 'secret_aoe_force') {
+    if (!me.value.hand.some((c) => g.canBeSlash(me.value, c))) return toast('需一张【击】才能引弓立威')
+    return g.useSecretSkill(me.value, { skillEffect: eff })
+  }
+  if (eff === 'secret_unblockable' || eff === 'secret_rescue') {
+    skillMode.value = { eff, need: 'target', secret: true, picked: [] }
+    return
+  }
+  if (eff === 'secret_aoe_fire') {
+    const hasRed = me.value.hand.some((c) => ['heart', 'diamond'].includes(c.suit))
+    if (!hasRed) return toast('需一张红色手牌')
+    skillMode.value = { eff, need: 'target', multi: 2, secret: true, pickedSeats: [], picked: [] }
+    return
+  }
+  if (eff === 'secret_aoe_burn') {
+    const hasRed = me.value.hand.some((c) => ['heart', 'diamond'].includes(c.suit))
+    if (!hasRed) return toast('需红色手牌')
+    skillMode.value = { eff, need: 'target', multi: 3, min: 1, secret: true, pickedSeats: [], picked: [] }
+    return
   }
 }
 
@@ -239,8 +365,14 @@ function toggleSkillCard(uid) {
   else picked.push(uid)
   if (skillMode.value.count === 1 && picked.length === 1) {
     const uid0 = picked[0]
+    const eff = skillMode.value.eff
+    const isSecret = skillMode.value.secret
     skillMode.value = null
-    game.value.useSkill(me.value, { cardUid: uid0 })
+    if (isSecret) {
+      game.value.useSecretSkill(me.value, { skillEffect: eff, cardUid: uid0 })
+    } else {
+      game.value.useSkill(me.value, { skillEffect: eff, cardUid: uid0 })
+    }
   }
 }
 
@@ -248,8 +380,14 @@ function confirmSkill() {
   if (!skillMode.value) return
   const uids = skillMode.value.picked.slice()
   if (!uids.length) return toast('请先选择要弃置的手牌')
+  if (skillMode.value.then === 'target') {
+    // 仁德/联姻：先选两张牌，再选目标
+    skillMode.value = { eff: skillMode.value.eff, need: 'target', cardUids: uids, picked: [] }
+    return
+  }
+  const eff = skillMode.value.eff
   skillMode.value = null
-  game.value.useSkill(me.value, { cardUids: uids })
+  game.value.useSkill(me.value, { skillEffect: eff, cardUids: uids })
 }
 
 /* ==================== 响应与阶段推进 ==================== */
@@ -283,14 +421,25 @@ const hint = computed(() => {
   if (!st.value) return ''
   if (selecting.value) return `选择【${cardName(selecting.value.as || selecting.value.card.key)}】的目标：点击高亮的座位`
   if (skillMode.value) {
-    if (skillMode.value.need === 'target') return '发动武将技：点击一名角色'
-    return `弃置手牌以发动【${me.value.hero.skill.name}】（已选 ${skillMode.value.picked.length} 张）`
+    const m = skillMode.value
+    if (m.need === 'target' && m.multi) {
+      return `指定 ${m.multi} 个目标（已选 ${(m.pickedSeats || []).length} 个）：点击座位选择，选满自动发动`
+    }
+    if (m.need === 'target') {
+      const named = m.self ? '一名角色（可点自己）' : '一名其他角色'
+      return `发动武将技：点击${named}`
+    }
+    const cnt = m.count || 0
+    const label = m.eff === 'give_rende' || m.eff === 'heal_ally' ? '赠予' : '弃置'
+    if (cnt === 0) return `弃置任意数量手牌以发动（已选 ${m.picked.length} 张）`
+    return `${label} ${cnt} 张手牌以发动（已选 ${m.picked.length} 张）`
   }
   const p = pending.value
   if (p && p.idx !== 0) return `${st.value.seats[p.idx].label} 正在抉择…`
   if (p && p.kind === 'discard') return `收兵：需弃置 ${p.need} 张手牌（点击手牌选择）`
   if (p && p.kind === 'dodge') return p.text
   if (p && p.kind === 'save') return p.text
+  if (p && p.kind === 'judgeSwap') return p.text
   if (p && p.kind === 'negate') return p.text
   if (p && p.kind === 'duel') return p.text
   if (st.value.phase === 'over') return '战事已终'
@@ -369,12 +518,19 @@ function seatClass(idx) {
           </div>
           <div class="pc-epithet">{{ h.epithet }}</div>
           <div class="pc-hp">体力 {{ h.hp }} · 武力 {{ h.power }} · 统率 {{ h.leadership }}</div>
-          <div class="pc-skill">
-            <span class="pc-type" :style="{ color: SKILL_TYPES[h.skill.type].color }">
-              {{ h.skill.type }}
-            </span>
-            <span class="pc-sname">{{ h.skill.name }}</span>
-            <span class="pc-sdesc">{{ h.skill.desc }}</span>
+          <div class="pc-skills">
+            <div
+              v-for="s in (h.skills && h.skills.length ? h.skills : [h.skill])"
+              :key="s.name"
+              class="pc-skill"
+              :title="s.allusion ? s.desc + '\n【典故】' + s.allusion : s.desc"
+            >
+              <span class="pc-type" :style="{ color: SKILL_TYPES[s.type].color }">
+                {{ s.type }}
+              </span>
+              <span class="pc-sname">{{ s.name }}</span>
+              <span class="pc-sdesc">{{ s.desc }}</span>
+            </div>
           </div>
         </button>
       </div>
@@ -393,7 +549,7 @@ function seatClass(idx) {
           :current="st.turnIdx === s.idx && st.phase === 'playing'"
           :selectable="
             !!(selecting && selecting.candidates.includes(s.idx)) ||
-            !!(skillMode && skillMode.need === 'target' && s.idx !== 0 && s.alive)
+            !!(skillMode && skillMode.need === 'target' && s.alive && (skillMode.self || s.idx !== 0))
           "
           @pick="onSeatClick"
         />
@@ -442,6 +598,14 @@ function seatClass(idx) {
             坐视不救
           </button>
           <button
+            v-else-if="pending.kind === 'judgeSwap'"
+            type="button"
+            class="a-btn"
+            @click="respondNone()"
+          >
+            不改判
+          </button>
+          <button
             v-else-if="pending.kind === 'negate'"
             type="button"
             class="a-btn"
@@ -460,6 +624,21 @@ function seatClass(idx) {
           <span class="a-tip">点击手牌以响应</span>
         </template>
 
+        <!-- 技能菜单（多技能武将） -->
+        <div v-if="skillMenu && myTurn && st.stage === 'play' && !selectedCard && !(pending && pending.idx === 0)" class="skill-menu">
+          <button
+            v-for="s in myActives"
+            :key="s.name"
+            type="button"
+            class="sm-item"
+            :title="s.allusion ? s.desc + '\n【典故】' + s.allusion : s.desc"
+            @click="triggerSkill(s.effect)"
+          >
+            <span class="sm-name">{{ s.name }}</span>
+            <span class="sm-type">{{ s.type }}</span>
+          </button>
+        </div>
+
         <!-- 选中手牌后的可用动作 -->
         <template v-else-if="selectedCard">
           <button
@@ -477,12 +656,30 @@ function seatClass(idx) {
         <!-- 出牌阶段常规操作 -->
         <template v-else-if="myTurn && st.stage === 'play'">
           <button
-            v-if="skillUsable"
+            v-if="myActives.length === 1"
             type="button"
             class="a-btn skill"
-            @click="triggerSkill()"
+            :title="myActives[0].allusion"
+            @click="triggerSkill(myActives[0].effect)"
           >
-            发动【{{ me.hero.skill.name }}】
+            发动【{{ myActives[0].name }}】
+          </button>
+          <button
+            v-else-if="myActives.length > 1"
+            type="button"
+            class="a-btn skill"
+            @click="skillMenu = !skillMenu"
+          >
+            发动技能 ▾
+          </button>
+          <button
+            v-if="mySecret"
+            type="button"
+            class="a-btn secret"
+            :title="mySecret.allusion"
+            @click="triggerSecret()"
+          >
+            秘计【{{ mySecret.name }}】
           </button>
           <button v-if="skillMode && skillMode.need === 'cards'" type="button" class="a-btn" @click="confirmSkill()">
             确定弃牌（{{ skillMode.picked.length }}）
@@ -684,10 +881,11 @@ function seatClass(idx) {
   color: var(--g-dim);
 }
 .pc-skill {
-  margin-top: 8px;
-  padding-top: 6px;
-  border-top: 1px dashed var(--g-hair);
   font-size: 11px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
 }
 .pc-type {
   margin-right: 4px;
@@ -844,6 +1042,22 @@ function seatClass(idx) {
   gap: 8px;
   margin: 6px 0;
   min-height: 30px;
+  position: relative;
+}
+.pc-skills {
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--g-hair);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.pc-skill {
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
 }
 .a-btn {
   padding: 5px 12px;
@@ -867,6 +1081,50 @@ function seatClass(idx) {
 .a-btn.skill {
   border-color: #8fb4d9;
   color: #8fb4d9;
+}
+.a-btn.secret {
+  border-color: #b08fd9;
+  color: #b08fd9;
+  font-weight: 600;
+}
+.skill-menu {
+  position: absolute;
+  left: 14px;
+  bottom: 120px;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid var(--g-hair);
+  background: var(--g-panel);
+  box-shadow: 0 18px 40px -18px #000;
+}
+.sm-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--g-hair);
+  background: var(--g-panel-2);
+  color: var(--g-text);
+  font-size: 12px;
+  cursor: pointer;
+}
+.sm-item:hover {
+  border-color: #8fb4d9;
+}
+.sm-name {
+  font-weight: 600;
+}
+.sm-type {
+  font-size: 10px;
+  padding: 0 5px;
+  border-radius: 3px;
+  background: rgba(212, 175, 55, 0.14);
+  color: var(--g-gold);
 }
 .a-btn.danger {
   border-color: #c9513f;
