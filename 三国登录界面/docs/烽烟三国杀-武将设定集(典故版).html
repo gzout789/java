@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>烽烟三国杀 · 武将设定集（典故驱动版）</title>
+<style>
+:root{
+  --paper:#f7f2e8;
+  --ink:#2b2620;
+  --ink-soft:#5c5348;
+  --line:#d8cdb8;
+  --bronze:#8a6a3b;
+  --han:#1f7a5a;
+  --wei:#2c5282;
+  --wu:#b03a2e;
+  --qun:#6b4a8f;
+  --card:#fffdf8;
+}
+*{box-sizing:border-box}
+body{
+  margin:0;padding:0;background:var(--paper);color:var(--ink);
+  font-family:"PingFang SC","Microsoft YaHei","Noto Serif CJK SC",serif;
+  line-height:1.75;
+}
+.wrap{max-width:1080px;margin:0 auto;padding:48px 28px 80px}
+header{text-align:center;border-bottom:3px double var(--bronze);padding-bottom:26px;margin-bottom:36px}
+header h1{font-size:34px;letter-spacing:6px;margin:0 0 10px;color:#3a2f22}
+header .sub{color:var(--ink-soft);font-size:14px;letter-spacing:2px}
+header .quote{margin-top:16px;font-size:13px;color:var(--bronze);letter-spacing:1px}
+h2{font-size:22px;letter-spacing:3px;margin:46px 0 18px;padding-left:12px;border-left:5px solid var(--bronze)}
+h2 .cnt{font-size:13px;color:var(--ink-soft);letter-spacing:0;margin-left:8px}
+.intro{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:18px 22px;font-size:14px;color:var(--ink-soft)}
+.intro b{color:var(--ink)}
+table{width:100%;border-collapse:collapse;font-size:13.5px;background:var(--card);border:1px solid var(--line)}
+th,td{border:1px solid var(--line);padding:9px 12px;text-align:left}
+th{background:#efe7d8;font-weight:600;letter-spacing:1px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:20px;margin-top:8px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:18px 20px;position:relative;box-shadow:0 1px 3px rgba(0,0,0,.04)}
+.card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:5px;border-radius:8px 0 0 8px}
+.card.han::before{background:var(--han)}
+.card.wei::before{background:var(--wei)}
+.card.wu::before{background:var(--wu)}
+.card.qun::before{background:var(--qun)}
+.c-head{display:flex;align-items:baseline;justify-content:space-between;border-bottom:1px dashed var(--line);padding-bottom:10px;margin-bottom:12px}
+.c-name{font-size:20px;font-weight:700;letter-spacing:2px}
+.c-meta{font-size:12px;color:var(--ink-soft)}
+.tag{display:inline-block;font-size:11px;padding:2px 8px;border-radius:3px;color:#fff;margin-left:6px;letter-spacing:1px}
+.han .tag{background:var(--han)}
+.wei .tag{background:var(--wei)}
+.wu .tag{background:var(--wu)}
+.qun .tag{background:var(--qun)}
+.hp{font-size:12px;color:#8a2b2b;margin-left:6px}
+.skill{margin-top:12px}
+.skill-name{font-weight:700;font-size:15px;letter-spacing:1px}
+.skill-type{font-size:11px;padding:1px 7px;border:1px solid var(--bronze);color:var(--bronze);border-radius:3px;margin-left:6px;vertical-align:2px}
+.skill-when{font-size:12px;color:var(--ink-soft);margin:4px 0 4px}
+.skill-eff{font-size:13.5px;margin:2px 0 0}
+.allusion{background:#f3ece0;border-left:3px solid var(--bronze);padding:8px 12px;font-size:12.5px;color:#6b5b46;margin-top:8px;border-radius:0 4px 4px 0}
+.allusion b{color:var(--bronze);letter-spacing:1px}
+pre{background:#2f2a24;color:#e8e0d2;padding:12px 14px;border-radius:6px;font-size:12px;overflow-x:auto;line-height:1.6;margin:10px 0 0}
+code{font-family:"Consolas","JetBrains Mono",monospace}
+.hook{background:var(--card);border:1px solid var(--line);padding:14px 18px;border-radius:6px;font-size:13px}
+footer{margin-top:56px;text-align:center;font-size:12px;color:var(--ink-soft);border-top:1px solid var(--line);padding-top:18px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>烽烟三国杀</h1>
+  <div class="sub">武 将 设 定 集 · 典 故 驱 动 版</div>
+  <div class="quote">汉末动荡，汉主临危，忠良护主、群雄伐汉、隐客伺机。诸将各展韬略，以牌为兵，决一胜负。</div>
+</header>
+
+<div class="intro">
+  设计原则：<b>每个技能 = 一条可考的历史典故 + 一段可执行的结算逻辑</b>。
+  技能标签沿用四类：【常策】锁定技 /【奇谋】主动技 /【应策】响应技 /【秘计】限定技（一局一次）。
+  全部描述均已规避原版名词，可直接作为自研代码的需求文档。
+</div>
+
+<h2>典故 → 机制 映射<span class="cnt">母题如何抽象成玩法</span></h2>
+<table>
+<tr><th style="width:26%">典故母题</th><th style="width:32%">抽象出的机制</th><th>代表武将</th></tr>
+<tr><td>万军之中取上将首级</td><td>强攻不可挡 / 需双挡</td><td>关羽</td></tr>
+<tr><td>长坂坡七进七出</td><td>攻守互转（击 ↔ 挡）</td><td>赵云</td></tr>
+<tr><td>携民渡江、以德服人</td><td>给牌换收益、主公技</td><td>刘备</td></tr>
+<tr><td>空城抚琴、夜观天象</td><td>空手免疫 / 控牌顶</td><td>诸葛亮</td></tr>
+<tr><td>收编降卒、挟天子令诸侯</td><td>夺牌、压制出牌权</td><td>曹操</td></tr>
+<tr><td>拔矢啖睛</td><td>受伤反噬</td><td>夏侯惇</td></tr>
+<tr><td>冢虎善谋、高平陵之变</td><td>改判定、阵亡收割</td><td>司马懿</td></tr>
+<tr><td>火烧赤壁、蒋干盗书</td><td>群体伤害、反间夺牌</td><td>周瑜</td></tr>
+<tr><td>孙刘联姻、弓腰姬</td><td>治疗换牌、失装备摸牌</td><td>孙尚香</td></tr>
+<tr><td>夷陵火烧连营、为人谦冲</td><td>延时削弱、计略抗性</td><td>陆逊</td></tr>
+<tr><td>辕门射戟、人中吕布</td><td>破防强攻、全场立威</td><td>吕布</td></tr>
+<tr><td>连环美人计、闭月</td><td>强制互攻、回合结束过牌</td><td>貂蝉</td></tr>
+<tr><td>刮骨疗毒、青囊书</td><td>治疗、濒死救援</td><td>华佗</td></tr>
+</table>
+
+<h2>汉室阵营<span class="cnt">护主、辅助、续航</span></h2>
+<div class="grid">
+
+  <div class="card han">
+    <div class="c-head"><span class="c-name">刘备<span class="tag">汉</span><span class="hp">5 体力（主公 +1）</span></span><span class="c-meta">辅助 / 续航</span></div>
+    <div class="skill">
+      <div class="skill-name">仁德<span class="skill-type">奇谋</span></div>
+      <div class="skill-when">出牌阶段，每阶段限一次</div>
+      <p class="skill-eff">你可以将任意数量的手牌交给一名其他角色；若一次性给出不少于 2 张，你回复 1 点体力。</p>
+      <div class="allusion"><b>典故</b>　建安十三年曹操南征，刘备"携民渡江"，日行十余里而不弃百姓（《三国志·先主传》）；又三让徐州，以仁德立身。散财而得人心，故"给牌"换"回血"。</div>
+    </div>
+    <div class="skill">
+      <div class="skill-name">昭烈<span class="skill-type">主公技·应策</span></div>
+      <div class="skill-when">其他汉势力角色的出牌阶段</div>
+      <p class="skill-eff">其他汉势力角色可以交给你一张手牌，然后该角色摸一张牌。</p>
+      <div class="allusion"><b>典故</b>　桃园结义、得人死力——关羽挂印封金、赵云长坂救主，皆因刘备能"得众心"。主公技象征汉室正统的号召力。</div>
+    </div>
+  </div>
+
+  <div class="card han">
+    <div class="c-head"><span class="c-name">关羽<span class="tag">汉</span><span class="hp">4 体力</span></span><span class="c-meta">强攻 / 破防</span></div>
+    <div class="skill">
+      <div class="skill-name">武圣<span class="skill-type">应策</span></div>
+      <div class="skill-when">你使用或打出【击】时</div>
+      <p class="skill-eff">你可以将任意一张手牌当作【击】打出；若该牌为<strong>红色</strong>，目标需打出<strong>两张【挡】</strong>才能抵消。</p>
+      <div class="allusion"><b>典故</b>　建安五年白马之围，"羽望见良麾盖，策马刺良于万众之中，斩其首还，绍诸将莫能当者"（《三国志·关羽传》）。赤色应赤兔马与赤胆忠心，万军之中取上将首级，寻常招架挡不住。</div>
+    </div>
+    <div class="skill">
+      <div class="skill-name">单刀<span class="skill-type">秘计</span></div>
+      <div class="skill-when">出牌阶段，一局一次</div>
+      <p class="skill-eff">弃置一张手牌，视为对攻击范围内一名角色使用一张【击】，此【击】不可被【挡】抵消；若目标因此进入濒死，你摸 2 张牌。</p>
+      <div class="allusion"><b>典故</b>　建安二十年鲁肃索荆州，关羽"单刀赴会"，只带周仓与数骑赴吴营，词色慷慨，肃等慑服（《三国志·鲁肃传》裴注）。一人一刀，压得对方无法回应。</div>
+    </div>
+  </div>
+
+  <div class="card han">
+    <div class="c-head"><span class="c-name">赵云<span class="tag">汉</span><span class="hp">4 体力</span></span><span class="c-meta">攻守兼备</span></div>
+    <div class="skill">
+      <div class="skill-name">龙胆<span class="skill-type">应策</span></div>
+      <div class="skill-when">你需要使用【击】或【挡】时</div>
+      <p class="skill-eff">你可以将【击】当作【挡】使用，或将【挡】当作【击】使用。</p>
+      <div class="allusion"><b>典故</b>　建安十三年长坂坡，赵云怀抱后主、保护甘夫人，"皆得免难"；刘备赞曰"子龙一身都是胆也"（《云别传》）。七进七出，攻即是守、守即是攻。</div>
+    </div>
+    <div class="skill">
+      <div class="skill-name">单骑救主<span class="skill-type">秘计</span></div>
+      <div class="skill-when">一名其他角色进入濒死时，一局一次</div>
+      <p class="skill-eff">你可以弃置所有手牌，令其体力回复至 1 点，并令其摸 2 张牌。</p>
+      <div class="allusion"><b>典故</b>　长坂坡单骑冲阵救出阿斗——"弃全部身家，换一人活命"，故代价是清空手牌。</div>
+    </div>
+  </div>
+
+  <div class="card han">
+    <div class="c-head"><span class="c-name">诸葛亮<span class="tag">汉</span><span class="hp">3 体力</span></span><span class="c-meta">控制 / 控牌</span></div>
+    <div class="skill">
+      <div class="skill-name">空城<span class="skill-type">常策</span></div>
+      <div class="skill-when">锁定技，永久生效</div>
+      <p class="skill-eff">当你没有手牌时，你不能成为【击】与瞬发计略的目标。</p>
+      <div class="allusion"><b>典故</b>　街亭失守后，亮"凭栏而坐，焚香操琴"，司马懿疑有伏兵而退（演义第九十五回，本事见《三国志》裴松之注引"郭冲三事"）。空手而坐，无人敢攻。</div>
+    </div>
+    <div class="skill">
+      <div class="skill-name">观星<span class="skill-type">奇谋</span></div>
+      <div class="skill-when">出牌阶段限一次</div>
+      <p class="skill-eff">你可以观看牌堆顶的 3 张牌，然后以任意顺序放回牌堆顶或牌堆底。</p>
+      <div class="allusion"><b>典故</b>　"亮夜观天象"，借东风、草船借箭皆赖知天时；星象即牌堆——看得见的未来。</div>
+    </div>
+    <div class="skill">
+      <div class="skill-name">七星<span class="skill-type">秘计</span></div>
+      <div class="skill-when">你进入濒死时，一局一次</div>
+      <p class="skill-eff">你可以弃置所有牌，将体力回复至 2 点并摸 2 张牌。</p>
+      <div class="allusion"><b>典故</b>　建兴十二年五丈原，亮"禳星祈寿"，设七星灯祈禳延寿（演义第一〇三回）。以全部身家换一线生机。</div>
+    </div>
+  </div>
+</div>
+
+<h2>曹魏阵营<span class="cnt">掠夺、压制、反伤</span></h2>
+<div class="grid">
+
+  <div class="card wei">
+    <div class="c-head"><span class="c-name">曹操<span class="tag">魏</span><span class="hp">4 体力</span></span><span class="c-meta">掠夺 / 压制</span></div>
+    <div class="skill">
+      <div class="skill-name">收编<span class="skill-type">应策</span></div>
+      <div class="skill-when">你受到创伤后</div>
+      <p class="skill-eff">你可以获得伤害来源的一张手牌，或装备区的一张牌。</p>
+      <div class="allusion"><b>典故</b>　初平三年，曹操破青州黄巾，"受降卒三十余万……收其精锐者，号为青州兵"（《三国志·武帝纪》）。敌人的东西，转手就是自己的兵。</div>
+    </div>
+    <div class="skill">
+      <div class="skill-name">挟天子<span class="skill-type">奇谋</span></div>
+      <div class="skill-when">出牌阶段限一次</div>
+      <p class="skill-eff">弃置一张手牌，指定一名其他角色，令其本回合的用兵阶段不能使用或打出【击】。</p>
+      <div class="allusion"><b>典故</b>　建安元年，曹操迎汉献帝于洛阳，"挟天子以令诸侯"——不是打你，是不许你动手。</div>
+    </div>
+  </div>
+
+  <div class="card wei">
+    <div class="c-head"><span class="c-name">夏侯惇<span class="tag">魏</span><span class="hp">4 体力</span></span><span class="c-meta">反伤 / 强硬</span></div>
+    <div class="skill">
+      <div class="skill-name">拔矢啖睛<span class="skill-type">应策</span></div>
+      <div class="skill-when">你受到【击】造成的创伤后</div>
+      <p class="skill-eff">你可以令伤害来源选择一项：① 弃置两张手牌；② 受到 1 点创伤。</p>
+      <div class="allusion"><b>典故</b>　建安二年征吕布，"惇为流矢所中，伤左目"，拔箭啖睛曰"父精母血，不可弃也"（《三国志·夏侯惇传》裴注引《魏略》）。受了伤也要咬着牙打回去。</div>
+    </div>
+    <div class="skill">
+      <div class="skill-name">刚烈<span class="skill-type">常策</span></div>
+      <div class="skill-when">锁定技</div>
+      <p class="skill-eff">你受到【援】的回复量 +1（不超过体力上限）。</p>
+      <div class="allusion"><b>典故</b>　惇性清俭刚烈，得赏赐辄分与将士——恢复力源自其悍勇与得众。</div>
+    </div>
+  </div>
+
+  <div class="card wei">
+    <div class="c-head"><span class="c-name">司马懿<span class="tag">魏</span><span class="hp">3 体力</span></span><span class="c-meta">判定操控 / 收割</span></div>
+    <div class="skill">
+      <div class="skill-name">鬼才<span class="skill-type">应策</span></div>
+      <div class="skill-when">任意角色的判定牌生效前</div>
+      <p class="skill-eff">你可以打出一张手牌，代替该判定牌。</p>
+      <div class="allusion"><b>典故</b>　懿"鹰视狼顾"，善揣度人心、预判局势——亮送巾帼之服激其出战，懿笑问其寝食，已知其命不久（《晋书·宣帝纪》）。看穿对手的底牌，就有能力换掉它。</div>
+    </div>
+    <div class="skill">
+      <div class="skill-name">高平陵<span class="skill-type">秘计</span></div>
+      <div class="skill-when">一名角色阵亡时，一局一次</div>
+      <p class="skill-eff">你可以获得该角色的所有手牌与装备牌，并回复 1 点体力。</p>
+      <div class="allusion"><b>典故</b>　正始十年，懿趁曹爽陪帝谒高平陵，闭城门、据武库，一举夺权，尽收曹爽之众（《晋书·宣帝纪》）。他人之死，即我之资。</div>
+    </div>
+  </div>
+</div>
+
+<h2>孙吴阵营<span class="cnt">爆发、装备、控场</span></h2>
+<div class="grid">
+
+  <div class="card wu">
+    <div class="c-head"><span class="c-name">周瑜<span class="tag">吴</span><span class="hp">3 体力</span></span><span class="c-meta">爆发 / 群体伤害</span></div>
+    <div class="skill">
+      <div class="skill-name">英姿<span class="skill-type">奇谋</span></div>
+      <div class="skill-when">你的征粮阶段</div>
+      <p class="skill-eff">你摸牌时多摸一张（征粮阶段摸 3 张）。</p>
+      <div class="allusion"><b>典故</b>　"遥想公瑾当年，小乔初嫁了，雄姿英发，羽扇纶巾"——苏轼《念奴娇·赤壁怀古》。才俊从容，粮草自足。</div>
+    </div>
+    <div class="skill">
+      <div class="skill-name">火烧赤壁<span class="skill-type">秘计</span></div>
+      <div class="skill-when">出牌阶段，一局一次</div>
+      <p class="skill-eff">弃置一张红色手牌，指定至多两名其他角色各受到 1 点创伤，且不能被【挡】之外的牌阻止；此后你弃置一张装备牌（若有）。</p>
+      <div class="allusion"><b>典故</b>　建安十三年，黄盖诈降纵火，"顷之，烟炎张天，人马烧溺死者甚众"（《三国志·周瑜传》）。一把火烧尽连环战船，救无可救。</div>
+    </div>
+    <div class="skill">
+      <div class="skill-name">反间<span class="skill-type">应策</span></div>
+      <div class="skill-when">你成为【击】的目标且结算后</div>
+      <p class="skill-eff">弃置一张手牌，令使用者交给你一张手牌；若其不交，你对其造成 1 点创伤。</p>
+      <div class="allusion"><b>典故</b>　赤壁战前，瑜利用蒋干"盗书"，使曹操疑杀水军都督蔡瑁、张允（《江表传》）。借你之手，反噬你自己。</div>
+    </div>
+  </div>
+
+  <div class="card wu">
+    <div class="c-head"><span class="c-name">孙尚香<span class="tag">吴</span><span class="hp">3 体力</span></span><span class="c-meta">装备流 / 治疗</span></div>
+    <div class="skill">
+      <div class="skill-name">枭姬<span class="skill-type">应策</span></div>
+      <div class="skill-when">你失去装备区里的一张牌后</div>
+      <p class="skill-eff">你可以摸两张牌。</p>
+      <div class="allusion"><b>典故</b>　孙夫人"才捷刚猛，有诸兄之风"，侍婢百余人皆执刀侍立，刘备每入内常凛凛（《三国志·法正传》）。武备被夺，反而愈战愈勇。</div>
+    </div>
+    <div class="skill">
+      <div class="skill-name">联姻<span class="skill-type">奇谋</span></div>
+      <div class="skill-when">出牌阶段限一次</div>
+      <p class="skill-eff">弃置两张手牌，令一名其他角色与你各回复 1 点体力；若该角色为汉势力，你额外摸一张牌。</p>
+      <div class="allusion"><b>典故</b>　建安十四年，孙权嫁妹于刘备，孙刘联盟以抗曹（《三国志·先主传》）。一段政治婚姻，换来双方喘息。</div>
+    </div>
+  </div>
+
+  <div class="card wu">
+    <div class="c-head"><span class="c-name">陆逊<span class="tag">吴</span><span class="hp">3 体力</span></span><span class="c-meta">控场 / 计略抗性</span></div>
+    <div class="skill">
+      <div class="skill-name">谦冲<span class="skill-type">常策</span></div>
+      <div class="skill-when">锁定技</div>
+      <p class="skill-eff">你不能成为【惑敌】的目标；你受到计略牌造成的创伤 -1（最低 1 点）。</p>
+      <div class="allusion"><b>典故</b>　陆逊"意思深长，未有远近之议"，为人谦逊沉稳、不露锋芒；孙权称其"有超世之功者，必应光远之明"。沉得住气，故不受激将、不为流言所动。</div>
+    </div>
+    <div class="skill">
+      <div class="skill-name">夷陵<span class="skill-type">秘计</span></div>
+      <div class="skill-when">出牌阶段，一局一次</div>
+      <p class="skill-eff">弃置所有红色手牌，指定至多三名其他角色各受到 1 点创伤，并各弃置一张装备牌（若有）。</p>
+      <div class="allusion"><b>典故</b>　章武二年，逊以火攻破蜀军，"乃敕各持一把茅，以火攻拔之……破其四十余营"（《三国志·陆逊传》）。火烧连营七百里，营寨尽毁——故附带弃装备。</div>
+    </div>
+  </div>
+</div>
+
+<h2>群雄阵营<span class="cnt">极限强攻、操控、治疗</span></h2>
+<div class="grid">
+
+  <div class="card qun">
+    <div class="c-head"><span class="c-name">吕布<span class="tag">群</span><span class="hp">4 体力</span></span><span class="c-meta">极限强攻</span></div>
+    <div class="skill">
+      <div class="skill-name">无双<span class="skill-type">应策</span></div>
+      <div class="skill-when">你使用【击】指定目标时</div>
+      <p class="skill-eff">目标需打出<strong>两张【挡】</strong>才能抵消此【击】；若只打出一张，仍受 1 点创伤。</p>
+      <div class="allusion"><b>典故</b>　"人中吕布，马中赤兔"（《曹瞒传》）。布"便弓马，膂力过人，号为飞将"，寻常防御挡他不住。</div>
+    </div>
+    <div class="skill">
+      <div class="skill-name">辕门射戟<span class="skill-type">秘计</span></div>
+      <div class="skill-when">出牌阶段，一局一次</div>
+      <p class="skill-eff">弃置一张【击】，令所有其他角色各选择一项：弃置一张手牌，或受到 1 点创伤。</p>
+      <div class="allusion"><b>典故</b>　建安元年，袁术遣纪灵攻刘备，布于营门"举弓射戟，正中小支"，诸将惊呼"将军天威也"，遂罢兵解斗（《三国志·吕布传》）。一箭立威，全场噤声。</div>
+    </div>
+  </div>
+
+  <div class="card qun">
+    <div class="c-head"><span class="c-name">貂蝉<span class="tag">群</span><span class="hp">3 体力</span></span><span class="c-meta">操控 / 离间</span></div>
+    <div class="skill">
+      <div class="skill-name">离间<span class="skill-type">奇谋</span></div>
+      <div class="skill-when">出牌阶段限一次</div>
+      <p class="skill-eff">弃置一张牌，指定两名男性角色 A、B，令 A 对 B 使用一张【击】；若 A 无法或不愿如此做，A 失去 1 点体力，然后你摸一张牌。</p>
+      <div class="allusion"><b>典故</b>　司徒王允设连环美人计，先许貂蝉于吕布，后献于董卓，使二人反目，终致吕布手刃董卓（演义第八、九回）。不动一刀，借刀杀人。</div>
+    </div>
+    <div class="skill">
+      <div class="skill-name">闭月<span class="skill-type">常策</span></div>
+      <div class="skill-when">你的收阵阶段</div>
+      <p class="skill-eff">你的回合结束时，你摸一张牌。</p>
+      <div class="allusion"><b>典故</b>　貂蝉有"闭月"之貌——月亮见其美貌，自愧不如，隐入云中。美貌本身就是持续的资源。</div>
+    </div>
+  </div>
+
+  <div class="card qun">
+    <div class="c-head"><span class="c-name">华佗<span class="tag">群</span><span class="hp">3 体力</span></span><span class="c-meta">治疗 / 救援</span></div>
+    <div class="skill">
+      <div class="skill-name">青囊<span class="skill-type">奇谋</span></div>
+      <div class="skill-when">出牌阶段，每阶段限两次</div>
+      <p class="skill-eff">你可以弃置一张手牌，令一名已受伤的角色回复 1 点体力。</p>
+      <div class="allusion"><b>典故</b>　华佗"精方药……合汤不过数种"，创麻沸散、五禽戏（《三国志·方技传》）；狱中所著《青囊书》为医家至宝。弃一张牌换一条命，正是医者本色。</div>
+    </div>
+    <div class="skill">
+      <div class="skill-name">刮骨<span class="skill-type">应策</span></div>
+      <div class="skill-when">一名角色进入濒死时</div>
+      <p class="skill-eff">你可以将一张红色手牌当作【援】对其使用。</p>
+      <div class="allusion"><b>典故</b>　关羽左臂为流矢所中，医曰"当破臂作创，刮骨去毒"，羽"伸臂令医劈之……割炙引酒，言笑自若"（《三国志·关羽传》）。危难之际，一刀一药救人于将死。</div>
+    </div>
+  </div>
+</div>
+
+<h2>数值平衡速查<span class="cnt">13 名武将</span></h2>
+<table>
+<tr><th>武将</th><th>势力</th><th>体力</th><th>技能数</th><th>秘计</th><th>强度定位</th></tr>
+<tr><td>刘备</td><td>汉</td><td>5（主公+1）</td><td>2</td><td>—</td><td>团队续航</td></tr>
+<tr><td>关羽</td><td>汉</td><td>4</td><td>2</td><td>单刀</td><td>单点破防</td></tr>
+<tr><td>赵云</td><td>汉</td><td>4</td><td>2</td><td>单骑救主</td><td>攻守万金油</td></tr>
+<tr><td>诸葛亮</td><td>汉</td><td>3</td><td>3</td><td>七星</td><td>控牌自保</td></tr>
+<tr><td>曹操</td><td>魏</td><td>4</td><td>2</td><td>—</td><td>掠夺压制</td></tr>
+<tr><td>夏侯惇</td><td>魏</td><td>4</td><td>2</td><td>—</td><td>反伤</td></tr>
+<tr><td>司马懿</td><td>魏</td><td>3</td><td>2</td><td>高平陵</td><td>判定操控</td></tr>
+<tr><td>周瑜</td><td>吴</td><td>3</td><td>3</td><td>火烧赤壁</td><td>群体爆发</td></tr>
+<tr><td>孙尚香</td><td>吴</td><td>3</td><td>2</td><td>—</td><td>装备流奶妈</td></tr>
+<tr><td>陆逊</td><td>吴</td><td>3</td><td>2</td><td>夷陵</td><td>控场群伤</td></tr>
+<tr><td>吕布</td><td>群</td><td>4</td><td>2</td><td>辕门射戟</td><td>极限强攻</td></tr>
+<tr><td>貂蝉</td><td>群</td><td>3</td><td>2</td><td>—</td><td>操控离间</td></tr>
+<tr><td>华佗</td><td>群</td><td>3</td><td>2</td><td>—</td><td>专职治疗</td></tr>
+</table>
+
+<h2>代码落地<span class="cnt">数据结构与结算钩子</span></h2>
+<div class="hook">
+<b>武将数据示例（JSON）：</b>
+<pre><code>{
+  "id": "guanyu", "name": "关羽", "faction": "汉", "hp": 4,
+  "skills": [
+    { "name": "武圣", "type": "应策", "trigger": "on_use_card",
+      "condition": "intent == '击'",
+      "effect": "treat_as(card,'击'); if card.color=='red': required_block=2",
+      "allusion": "白马之围，策马刺良于万众之中" },
+    { "name": "单刀", "type": "秘计", "trigger": "on_phase", "phase": "用兵",
+      "once_per_game": true,
+      "effect": "discard(1); force_hit(target, unblockable=True)",
+      "allusion": "单刀赴会，词色慷慨，肃等慑服" }
+  ]
+}</code></pre>
+<b>结算钩子（与六阶段回合对齐）：</b>
+<pre><code>on_round_start (启策) → 常策结算
+on_judge       (判定) → 鬼才等改判钩子
+on_draw        (征粮) → 英姿、断粮判定
+on_play        (用兵) → 奇谋、应策主战场
+on_discard     (收兵) → 手牌上限 = 体力
+on_round_end   (收阵) → 闭月等收尾技
+on_damage / on_dying / on_death
+             → 拔矢啖睛、七星、刮骨、单骑救主、高平陵</code></pre>
+</div>
+
+<h2>可扩展方向<span class="cnt">后续加代码</span></h2>
+<table>
+<tr><th style="width:24%">方向</th><th>说明</th></tr>
+<tr><td>主公技体系</td><td>为刘备之外的汉主候选配专属号召技</td></tr>
+<tr><td>国战模式</td><td>去掉身份，按势力组队，武将势力即阵营</td></tr>
+<tr><td>宝物 / 坐骑扩展牌</td><td>赤兔马（吕布专属）、青囊书（华佗专属）</td></tr>
+<tr><td>体力流失机制</td><td>与"受到创伤"区分，用于【惊雷】、貂蝉【离间】等不触发反伤类应策的结算</td></tr>
+<tr><td>连营传导类计略</td><td>以陆逊【夷陵】为模板扩展多目标连锁牌</td></tr>
+</table>
+
+<footer>烽烟三国杀 · 武将设定集（典故驱动版） · 13 名武将 / 26 个技能</footer>
+
+</div>
+</body>
+</html>
