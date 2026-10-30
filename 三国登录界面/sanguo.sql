@@ -11,7 +11,7 @@
  Target Server Version : 80039 (8.0.39)
  File Encoding         : 65001
 
- Date: 26/10/2026 10:01:34
+ Date: 30/10/2026 15:14:09
 */
 
 SET NAMES utf8mb4;
@@ -129,7 +129,7 @@ CREATE TABLE `recruit`  (
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE INDEX `uk_user_hero`(`user_id` ASC, `hero_id` ASC) USING BTREE,
   INDEX `idx_user`(`user_id` ASC) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 8 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '点将台招募记录表' ROW_FORMAT = DYNAMIC;
+) ENGINE = InnoDB AUTO_INCREMENT = 9 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '点将台招募记录表' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Records of recruit
@@ -141,6 +141,7 @@ INSERT INTO `recruit` VALUES (4, 1, 10, 1025, '2026-10-23 14:10:58');
 INSERT INTO `recruit` VALUES (5, 1, 9, 1035, '2026-10-23 14:10:59');
 INSERT INTO `recruit` VALUES (6, 1, 7, 1060, '2026-10-23 14:10:59');
 INSERT INTO `recruit` VALUES (7, 1, 6, 1150, '2026-10-23 14:10:59');
+INSERT INTO `recruit` VALUES (8, 1, 30, 870, '2026-10-30 14:43:25');
 
 -- ----------------------------
 -- Table structure for task
