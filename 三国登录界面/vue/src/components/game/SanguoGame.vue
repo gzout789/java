@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import { authHeaders, theme, toggleTheme } from '../../composables/useTheme.js'
+import { heroImg, onHeroImgError } from '../../composables/useHeroImg.js'
 import { createGame } from '../../game/engine.js'
 import {
   toGameHero, ROLES, CARDS, EQUIPS, SKILL_TYPES, cardName, isDelay, isEquip
@@ -111,6 +112,11 @@ function onHandCard(card) {
   if (!g || !me.value) return
   const p = pending.value
 
+  /* 收兵弃牌必须放在响应分支之前：
+     响应分支以「p.idx === 0 就 return」收尾，写在它后面的话，玩家自己收兵时
+     点手牌永远进不到 toggleDiscard，回合会卡死在弃牌这一步 */
+  if (p && p.idx === 0 && p.kind === 'discard') return toggleDiscard(card.uid)
+
   // 响应阶段：直接把牌交出去
   if (p && p.idx === 0) {
     if (p.kind === 'dodge' && g.canBeDodge(me.value, card)) return respond('dodge', card.uid)
@@ -123,8 +129,8 @@ function onHandCard(card) {
     return
   }
 
-  // 收兵弃牌
-  if (p && p.kind === 'discard') return toggleDiscard(card.uid)
+  // 收兵弃牌（已在上方提前处理，这里兜底其他玩家的展示态）
+  if (p && p.kind === 'discard') return
 
   // 技能需要弃牌
   if (skillMode.value && skillMode.value.need === 'cards') return toggleSkillCard(card.uid)
@@ -517,6 +523,10 @@ function seatClass(idx) {
             <span class="pc-fac">{{ h.factionName }}</span>
           </div>
           <div class="pc-epithet">{{ h.epithet }}</div>
+          <div class="pc-por">
+            <span class="pc-fb" aria-hidden="true">{{ h.name.slice(0, 1) }}</span>
+            <img :src="heroImg(h.name)" :alt="h.name" loading="lazy" decoding="async" @error="onHeroImgError" />
+          </div>
           <div class="pc-hp">体力 {{ h.hp }} · 武力 {{ h.power }} · 统率 {{ h.leadership }}</div>
           <div class="pc-skills">
             <div
@@ -572,7 +582,9 @@ function seatClass(idx) {
     </div>
 
     <!-- 底部操作区 -->
-    <footer v-if="st.phase === 'playing'" class="dock">
+    <!-- 注意：这里是独立 v-if，不受上面 loading/error 分支保护。
+         首帧 st 还是 null，必须写 st && ，否则整棵组件渲染直接抛错、页面全白 -->
+    <footer v-if="st && st.phase === 'playing'" class="dock">
       <div class="hint-row">
         <span class="hint">{{ hint }}</span>
         <span v-if="toastText" class="toast">{{ toastText }}</span>
@@ -692,7 +704,10 @@ function seatClass(idx) {
       </div>
 
       <div class="hand-row">
-        <span class="hand-label">我的手牌 {{ me.hand.length }} / 体力 {{ me.hp }}</span>
+        <span class="hand-label" v-if="me">
+          <span>手牌 <b>{{ me.hand.length }}</b></span>
+          <span>体力 <b>{{ me.hp }}</b></span>
+        </span>
         <div class="hand">
           <GameCard
             v-for="c in me.hand"
@@ -712,7 +727,7 @@ function seatClass(idx) {
     </footer>
 
     <!-- 结算 -->
-    <div v-if="st.phase === 'over'" class="over">
+    <div v-if="st && st.phase === 'over'" class="over">
       <div class="over-card">
         <h2 :class="{ win: st.winner.playerWin }">
           {{ st.winner.playerWin ? '凯旋' : '败北' }}
@@ -736,9 +751,13 @@ function seatClass(idx) {
 
 <style scoped>
 .game-root {
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
+  /* 锁定视口高度：牌局中手牌/战报/按钮增删都不会让整页高度变化，
+     否则页面滚动条一出现一消失，整个界面就会左右上下“移动” */
+  height: 100vh;
+  height: 100dvh;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  overflow: hidden;
   background: var(--g-felt);
   color: var(--g-text);
   font-family: var(--font-body);
@@ -815,12 +834,14 @@ function seatClass(idx) {
 
 /* ---------- 选将 ---------- */
 .pick {
-  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
   padding: 24px 20px;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 6px;
+  scrollbar-width: thin;
 }
 .pick-title {
   font-family: var(--font-cal, serif);
@@ -876,6 +897,41 @@ function seatClass(idx) {
   color: var(--g-faint);
   margin-bottom: 6px;
 }
+/* 选将卡片头像：固定 3:2，缺图显示姓氏占位 */
+.pc-por {
+  position: relative;
+  margin-bottom: 6px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--g-hair);
+  aspect-ratio: 3 / 2;
+  background: #1b1409;
+}
+.pc-por img {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 22%;
+  display: block;
+  transition: transform 0.35s var(--ease-out);
+}
+.pick-card:hover .pc-por img {
+  transform: scale(1.06);
+}
+.pc-fb {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-cal, serif);
+  font-size: 46px;
+  color: var(--fac);
+  opacity: 0.6;
+  background: radial-gradient(circle at 50% 35%, rgba(255, 255, 255, 0.07), rgba(0, 0, 0, 0.42));
+}
 .pc-hp {
   font-size: 11px;
   color: var(--g-dim);
@@ -903,16 +959,24 @@ function seatClass(idx) {
 
 /* ---------- 牌桌 ---------- */
 .board {
-  flex: 1;
   display: grid;
-  grid-template-columns: 1fr 260px;
+  grid-template-columns: minmax(0, 1fr) 268px;
+  grid-template-rows: minmax(0, 1fr);
   gap: 12px;
   padding: 12px 16px;
   min-height: 0;
+  overflow: hidden;
 }
 .table {
+  /* 九宫格摆座位：绝对定位 + 百分比在矮屏（1366×768 及以下）会让上下座位互相压住，
+     改成网格后行列由内容撑开，任何尺寸都不会重叠，也不会再靠 transform 居中 */
   position: relative;
-  min-height: 420px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto 1fr auto;
+  gap: 6px;
+  padding: 14px;
+  min-height: 0;
   border-radius: 14px;
   border: 1px solid var(--g-hair);
   background:
@@ -921,36 +985,34 @@ function seatClass(idx) {
   overflow: hidden;
 }
 .table :deep(.p0) {
-  position: absolute;
-  left: 50%;
-  bottom: 10px;
-  transform: translateX(-50%);
+  grid-area: 3 / 2;
+  justify-self: center;
+  align-self: end;
 }
 .table :deep(.p1) {
-  position: absolute;
-  left: 14px;
-  bottom: 27%;
+  grid-area: 2 / 1;
+  justify-self: start;
+  align-self: center;
 }
 .table :deep(.p2) {
-  position: absolute;
-  left: 14px;
-  top: 14px;
+  grid-area: 1 / 1;
+  justify-self: start;
+  align-self: start;
 }
 .table :deep(.p3) {
-  position: absolute;
-  right: 14px;
-  top: 14px;
+  grid-area: 1 / 3;
+  justify-self: end;
+  align-self: start;
 }
 .table :deep(.p4) {
-  position: absolute;
-  right: 14px;
-  bottom: 27%;
+  grid-area: 2 / 3;
+  justify-self: end;
+  align-self: center;
 }
 .center {
-  position: absolute;
-  left: 50%;
-  top: 40%;
-  transform: translate(-50%, -50%);
+  grid-area: 2 / 2;
+  align-self: center;
+  justify-self: center;
   text-align: center;
   font-size: 12px;
   color: var(--g-dim);
@@ -978,6 +1040,7 @@ function seatClass(idx) {
   border: 1px solid var(--g-hair);
   background: var(--g-panel);
   min-height: 0;
+  overflow: hidden;
 }
 .lp-title {
   padding: 8px 10px;
@@ -985,10 +1048,13 @@ function seatClass(idx) {
   font-size: 12px;
   color: var(--g-gold);
   letter-spacing: 2px;
+  flex: none;
 }
 .lp-body {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
+  scrollbar-width: thin;
   padding: 8px 10px;
   font-size: 12px;
   line-height: 1.75;
@@ -1017,32 +1083,47 @@ function seatClass(idx) {
 }
 
 /* ---------- 底部 ---------- */
+/* 三段固定高度：提示 22 / 操作 60 / 手牌 104。
+   操作区按钮数量每回合都在变，若让它撑开高度，牌桌就会随之伸缩、座位跳动 */
 .dock {
+  position: relative;
+  z-index: 5;
+  display: grid;
+  grid-template-rows: 22px 60px 104px;
+  gap: 6px;
   border-top: 1px solid var(--g-hair);
   background: var(--g-panel);
-  padding: 8px 16px 12px;
+  padding: 8px 16px 10px;
 }
 .hint-row {
   display: flex;
   align-items: center;
   gap: 10px;
   font-size: 12px;
-  min-height: 20px;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
 }
 .hint {
   color: var(--g-gold);
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .toast {
+  flex: none;
   color: #c9513f;
 }
 .action-row {
   display: flex;
   flex-wrap: wrap;
+  align-content: flex-start;
   align-items: center;
   gap: 8px;
-  margin: 6px 0;
-  min-height: 30px;
-  position: relative;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  position: static;
 }
 .pc-skills {
   margin-top: 8px;
@@ -1089,8 +1170,8 @@ function seatClass(idx) {
 }
 .skill-menu {
   position: absolute;
-  left: 14px;
-  bottom: 120px;
+  left: 18px;
+  bottom: calc(100% + 6px);
   z-index: 40;
   display: flex;
   flex-direction: column;
@@ -1139,26 +1220,58 @@ function seatClass(idx) {
 }
 .hand-row {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   gap: 12px;
+  min-width: 0;
+  min-height: 0;
 }
 .hand-label {
+  /* 固定宽度 + 两行：手牌数 9→10 时文字变长也不会把手牌整体往右推 */
+  flex: 0 0 62px;
+  width: 62px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
   font-size: 11px;
+  line-height: 1.5;
   color: var(--g-faint);
   white-space: nowrap;
+}
+.hand-label b {
+  color: var(--g-text);
+  font-weight: 600;
 }
 .hand {
   display: flex;
   gap: 6px;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
   overflow-x: auto;
-  padding: 6px 2px;
-  min-height: 96px;
+  overflow-y: hidden;
+  /* 上留 12px 给卡牌悬停上浮，下留 4px 给滚动条，手牌再多也不改变底栏高度 */
+  padding: 12px 2px 4px;
   align-items: flex-end;
+  scrollbar-width: thin;
+}
+.hand::-webkit-scrollbar,
+.action-row::-webkit-scrollbar,
+.lp-body::-webkit-scrollbar,
+.pick::-webkit-scrollbar {
+  height: 6px;
+  width: 6px;
+}
+.hand::-webkit-scrollbar-thumb,
+.action-row::-webkit-scrollbar-thumb,
+.lp-body::-webkit-scrollbar-thumb,
+.pick::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(212, 175, 55, 0.3);
 }
 .empty-hand {
   font-size: 12px;
   color: var(--g-faint);
-  padding: 40px 0;
+  padding: 30px 0;
 }
 
 /* ---------- 结算 ---------- */
@@ -1229,13 +1342,45 @@ function seatClass(idx) {
 
 @media (max-width: 900px) {
   .board {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) 150px;
   }
   .log-panel {
     max-height: 150px;
   }
+  .dock {
+    grid-template-rows: 22px 60px 100px;
+  }
+}
+/* 矮屏：牌桌留出更多高度，否则上下两排座位会顶到边 */
+@media (max-height: 820px) {
+  .board {
+    padding: 8px 12px;
+    gap: 10px;
+  }
   .table {
-    min-height: 360px;
+    padding: 10px;
+    gap: 4px;
+  }
+  .dock {
+    grid-template-rows: 20px 56px 96px;
+    padding: 6px 12px 8px;
+  }
+  .hand {
+    padding: 10px 2px 4px;
+  }
+  /* 座位整体缩一档：zoom 是布局级缩放（文字仍清晰），
+     比逐个改字号/间距稳，无论武将有几个技能都等比缩小 */
+  .table :deep(.seat) {
+    zoom: 0.94;
+  }
+}
+@media (max-height: 720px) {
+  .dock {
+    grid-template-rows: 20px 52px 90px;
+  }
+  .table :deep(.seat) {
+    zoom: 0.86;
   }
 }
 </style>

@@ -1,6 +1,7 @@
 <script setup>
 import { computed } from 'vue'
 import { ROLES, EQUIPS, SKILL_TYPES, cardName } from '../../game/rules.js'
+import { heroImg, onHeroImgError } from '../../composables/useHeroImg.js'
 
 const props = defineProps({
   seat: { type: Object, required: true },
@@ -14,7 +15,15 @@ const role = computed(() => ROLES[props.seat.role] || { name: '?' })
 const equips = computed(() =>
   Object.entries(props.seat.equip)
     .filter(([, v]) => v)
-    .map(([slot, card]) => ({ slot, name: cardName(card.key), label: EQUIPS[card.key] ? EQUIPS[card.key].name : '' }))
+    .map(([slot, card]) => {
+      const full = EQUIPS[card.key] ? EQUIPS[card.key].name : cardName(card.key)
+      return {
+        slot,
+        // 只取前两字：四个槽位（兵刃/甲胄/两匹坐骑）也能排成一行，座位高度才稳定
+        short: full.slice(0, 2),
+        label: `${full}${EQUIPS[card.key] && EQUIPS[card.key].desc ? '：' + EQUIPS[card.key].desc : ''}`
+      }
+    })
 )
 const hpDots = computed(() => {
   const arr = []
@@ -47,15 +56,26 @@ function skillTip(s) {
       <span v-if="!seat.alive" class="dead-tag">已殁</span>
     </div>
 
-    <div class="hero">
-      <span class="h-name">{{ seat.hero.name }}</span>
-      <span class="h-epithet">{{ seat.hero.epithet }}</span>
-    </div>
-
-    <div class="faction" :style="{ color: 'var(--fac)' }">{{ seat.hero.factionName }}</div>
-
-    <div class="hp" :title="`体力 ${seat.hp}/${seat.maxHp}`">
-      <span v-for="(on, i) in hpDots" :key="i" class="dot" :class="{ on }"></span>
+    <div class="top">
+      <div class="por">
+        <span class="por-fb" aria-hidden="true">{{ seat.hero.name.slice(0, 1) }}</span>
+        <img
+          :src="heroImg(seat.hero.name)"
+          :alt="seat.hero.name"
+          loading="lazy"
+          decoding="async"
+          draggable="false"
+          @error="onHeroImgError"
+        />
+      </div>
+      <div class="ident">
+        <span class="h-name">{{ seat.hero.name }}</span>
+        <span class="h-epithet">{{ seat.hero.epithet }}</span>
+        <div class="faction">{{ seat.hero.factionName }}</div>
+        <div class="hp" :title="`体力 ${seat.hp}/${seat.maxHp}`">
+          <span v-for="(on, i) in hpDots" :key="i" class="dot" :class="{ on }"></span>
+        </div>
+      </div>
     </div>
 
     <div class="meta">
@@ -63,28 +83,32 @@ function skillTip(s) {
       <span v-if="seat.traps.length" class="trap" title="计略区">計 {{ seat.traps.length }}</span>
     </div>
 
-    <div v-if="equips.length" class="equips">
-      <span v-for="e in equips" :key="e.slot" class="eq" :title="e.label">{{ e.name }}</span>
+    <!-- 装备格永远占位、且强制一行：网格布局里同一行座位共用行高，
+         这一格若随装备增减变高，整排座位都会被顶动 -->
+    <div class="equips">
+      <span v-for="e in equips" :key="e.slot" class="eq" :title="e.label">{{ e.short }}</span>
     </div>
 
-    <div v-if="skills.length" class="skills">
-      <div
+    <!-- 技能区：固定单行 + 省略号，无论 1 个还是 3 个技能高度都不变，
+         避免高技能武将在矮屏把整排座位顶高（悬停可见完整效果/典故） -->
+    <div class="skills">
+      <span
         v-for="s in skills"
         :key="s.name"
         class="skill"
         :title="skillTip(s)"
       >
-        <span class="s-type" :style="{ background: (SKILL_TYPES[s.type] && SKILL_TYPES[s.type].color) + '22', color: SKILL_TYPES[s.type] ? SKILL_TYPES[s.type].color : 'var(--g-gold)' }">{{ s.type }}</span>
-        <span class="s-name">{{ s.name }}</span>
-      </div>
+        <span class="s-type" :style="{ background: (SKILL_TYPES[s.type] && SKILL_TYPES[s.type].color) + '22', color: SKILL_TYPES[s.type] ? SKILL_TYPES[s.type].color : 'var(--g-gold)' }">{{ s.type }}</span><span class="s-name">{{ s.name }}</span>
+      </span>
+      <span v-if="!skills.length" class="skill empty">—</span>
     </div>
   </div>
 </template>
 
 <style scoped>
 .seat {
-  width: 132px;
-  padding: 8px 10px;
+  width: 158px;
+  padding: 8px 9px;
   border-radius: 10px;
   border: 1px solid var(--g-hair);
   background: var(--g-panel);
@@ -97,7 +121,7 @@ function skillTip(s) {
   box-shadow: 0 10px 26px -18px #000;
 }
 .seat.me {
-  width: 152px;
+  width: 176px;
 }
 .seat.current {
   border-color: var(--g-gold);
@@ -127,9 +151,12 @@ function skillTip(s) {
 }
 .badge-row {
   display: flex;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 4px;
   margin-bottom: 4px;
+  min-height: 19px;
+  overflow: hidden;
 }
 .role {
   padding: 1px 6px;
@@ -154,28 +181,75 @@ function skillTip(s) {
   font-size: 10px;
   color: var(--g-faint);
 }
-.hero {
+
+/* 头像 + 名号：固定高度，牌局进行中座位不会忽高忽低 */
+.top {
   display: flex;
-  align-items: baseline;
-  gap: 5px;
+  align-items: stretch;
+  gap: 7px;
+  height: 66px;
+}
+.por {
+  position: relative;
+  flex: none;
+  width: 50px;
+  height: 66px;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid var(--g-hair);
+  background: #1b1409;
+}
+.por img {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 20%;
+  display: block;
+}
+/* 缺图兜底：姓氏大字，不出现破图 */
+.por-fb {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-cal, serif);
+  font-size: 26px;
+  color: var(--fac);
+  opacity: 0.7;
+  background: radial-gradient(circle at 50% 35%, rgba(255, 255, 255, 0.08), rgba(0, 0, 0, 0.4));
+}
+.ident {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+  gap: 1px;
 }
 .h-name {
   font-family: var(--font-cal, serif);
   font-size: 16px;
   color: var(--g-text);
+  white-space: nowrap;
 }
 .h-epithet {
   font-size: 10px;
   color: var(--g-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .faction {
   font-size: 11px;
+  color: var(--fac);
   opacity: 0.9;
 }
 .hp {
   display: flex;
   gap: 3px;
-  margin: 4px 0;
+  margin-top: 3px;
 }
 .dot {
   width: 9px;
@@ -191,6 +265,7 @@ function skillTip(s) {
 .meta {
   display: flex;
   gap: 8px;
+  margin-top: 6px;
   color: var(--g-dim);
   font-size: 11px;
 }
@@ -199,9 +274,12 @@ function skillTip(s) {
 }
 .equips {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 3px;
   margin-top: 3px;
+  /* 固定一行高：不装军械时也占位，座位高度才不会变 */
+  height: 17px;
+  overflow: hidden;
 }
 .eq {
   padding: 0 4px;
@@ -212,27 +290,103 @@ function skillTip(s) {
 }
 .skills {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
-  margin-top: 5px;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
   padding-top: 4px;
   border-top: 1px dashed var(--g-hair);
   font-size: 11px;
+  /* 固定单行高：技能数量变化不改变座位高度 */
+  height: 17px;
+  overflow: hidden;
 }
 .skill {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
   cursor: help;
+  white-space: nowrap;
+  flex: none;
+  min-width: 0;
+}
+.skill .s-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.skill.empty {
+  color: var(--g-faint);
 }
 .s-type {
-  padding: 0 4px;
+  padding: 0 3px;
   border-radius: 3px;
   background: rgba(212, 175, 55, 0.14);
   color: var(--g-gold);
   font-size: 10px;
+  flex: none;
 }
 .s-name {
   color: var(--g-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 矮屏（1366×768 笔记本 / 1280×800）压一档座位尺寸：
+   牌桌高度只有 450~510px，上下两排座位必须各自瘦身才放得下 */
+@media (max-height: 860px) {
+  .seat {
+    width: 148px;
+    padding: 5px 8px;
+  }
+  .seat.me {
+    width: 164px;
+  }
+  .badge-row {
+    min-height: 17px;
+    margin-bottom: 3px;
+  }
+  .top {
+    height: 52px;
+    gap: 6px;
+  }
+  .por {
+    width: 40px;
+    height: 52px;
+  }
+  .h-name {
+    font-size: 15px;
+  }
+  .h-epithet {
+    display: none;
+  }
+  .hp {
+    margin-top: 2px;
+  }
+  .meta {
+    margin-top: 2px;
+  }
+  .equips {
+    margin-top: 2px;
+  }
+  .skills {
+    margin-top: 2px;
+    padding-top: 2px;
+    gap: 3px;
+    height: 16px;
+  }
+}
+@media (max-height: 740px) {
+  .h-name {
+    font-size: 14px;
+  }
+  .dot {
+    width: 8px;
+    height: 8px;
+  }
+  .faction {
+    font-size: 10px;
+  }
 }
 </style>

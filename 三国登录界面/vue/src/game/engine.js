@@ -208,8 +208,10 @@ export class Game {
       if (swapped) judgeCard = swapped
       const hit = judgeResult(card.key, judgeCard)
       this.state.discard.push(judgeCard)
+      /* 判定牌是 judgeCard，不是被判定那张锦囊；这里之前误用了 card.key，
+         会打出「2 困局」这种看不懂的战报 */
       this.log(
-        `${seat.label} 的【${cardName(card.key)}】判定：${judgeCard.num} ${cardName(card.key)} → ${hit ? '凶' : '吉'}`,
+        `${seat.label} 的【${cardName(card.key)}】判定：${judgeCard.num}${suitSymbol(judgeCard.suit)}【${cardName(judgeCard.key)}】 → ${hit ? '凶' : '吉'}`,
         hit ? 'hit' : 'good'
       )
       await this.tick(seat, 420)
@@ -686,7 +688,8 @@ export class Game {
       }
     }
     target.hp -= amount
-    this.log(`${target.label} 受到 ${amount} 点创伤（${cause || '交锋'}），剩余 ${Math.max(target.hp, 0)} 点体力。`, 'hit')
+    /* cause 可能是内部键（例如 'slash'），战报里一律翻成中文牌名，别让玩家看到英文键 */
+    this.log(`${target.label} 受到 ${amount} 点创伤（${cause ? cardName(cause) : '交锋'}），剩余 ${Math.max(target.hp, 0)} 点体力。`, 'hit')
 
     // 受伤触发的应策（一名武将可有多个应策，依次结算）
     if (this.hasEffect(target, 'hurt_draw1')) {

@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useTheme, spawnInkRipple, authHeaders } from '../composables/useTheme'
+import { heroImg, onHeroImgError } from '../composables/useHeroImg'
 
 const props = defineProps({
   user: { type: Object, required: true }
@@ -57,10 +58,8 @@ function factionName(key) {
   return (FACTIONS.find((f) => f.key === key) || {}).name || key
 }
 
-/* 武将画像路径（vue/public/heroes/武将名.png） */
-function heroImg(name) {
-  return '/heroes/' + encodeURIComponent(name) + '.png'
-}
+/* 武将画像路径统一由 composables/useHeroImg.js 提供
+ * （列表用小图 webp，缺图时走水墨占位，不再整块 display:none 塌陷） */
 
 /* ---------------- 天下大势（各阵营人数） ---------------- */
 const stats = ref(null)
@@ -716,11 +715,14 @@ onMounted(() => {
               <span class="hc-fac" :data-f="h.faction">{{ factionName(h.faction) }}</span>
             </div>
             <div class="hc-portrait" :data-f="h.faction">
+              <span class="hp-fallback" aria-hidden="true">{{ h.name.slice(0, 1) }}</span>
+              <span class="hp-fallback-name">{{ h.name }}</span>
               <img
                 :src="heroImg(h.name)"
                 :alt="h.name"
                 loading="lazy"
-                @error="$event.target.parentElement.style.display = 'none'"
+                decoding="async"
+                @error="onHeroImgError"
               />
             </div>
             <p class="hc-desc">{{ h.description }}</p>
@@ -772,11 +774,14 @@ onMounted(() => {
             </div>
 
             <div class="hc-portrait" :data-f="g.faction">
+              <span class="hp-fallback" aria-hidden="true">{{ g.name.slice(0, 1) }}</span>
+              <span class="hp-fallback-name">{{ g.name }}</span>
               <img
                 :src="heroImg(g.name)"
                 :alt="g.name"
                 loading="lazy"
-                @error="$event.target.parentElement.style.display = 'none'"
+                decoding="async"
+                @error="onHeroImgError"
               />
               <span v-if="!g.sameFaction" class="rc-foreign">他阵营 +50%</span>
             </div>
@@ -1891,6 +1896,7 @@ onMounted(() => {
 
 /* 武将画像 */
 .hc-portrait {
+  position: relative;
   margin-top: 10px;
   border: 1px solid var(--hair);
   border-radius: 7px;
@@ -1899,12 +1905,45 @@ onMounted(() => {
   aspect-ratio: 3 / 2;
 }
 .hc-portrait img {
+  position: relative;
   width: 100%;
   height: 100%;
   object-fit: cover;
   display: block;
   transition: transform 0.35s ease;
 }
+/* 缺图时的水墨占位：姓氏大字 + 名号，永远不会留白 */
+.hp-fallback {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-art, var(--font-cal, serif));
+  font-size: 64px;
+  line-height: 1;
+  color: rgba(120, 80, 30, 0.28);
+  background:
+    radial-gradient(circle at 50% 40%, rgba(255, 255, 255, 0.55), transparent 68%),
+    linear-gradient(160deg, #f3ead8, #e3d3b4);
+  user-select: none;
+}
+.hp-fallback-name {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 6px;
+  text-align: center;
+  font-family: var(--font-cal, serif);
+  font-size: 12px;
+  letter-spacing: 4px;
+  color: rgba(120, 80, 30, 0.55);
+  pointer-events: none;
+}
+.hc-portrait[data-f="wei"] .hp-fallback { color: rgba(47, 111, 176, 0.3); }
+.hc-portrait[data-f="shu"] .hp-fallback { color: rgba(46, 139, 87, 0.3); }
+.hc-portrait[data-f="wu"] .hp-fallback { color: rgba(31, 158, 143, 0.3); }
+.hc-portrait[data-f="han"] .hp-fallback { color: rgba(178, 34, 34, 0.28); }
 .hero-card:hover .hc-portrait img {
   transform: scale(1.05);
 }
