@@ -174,12 +174,24 @@ public class RecruitServiceImpl implements RecruitService {
                 .stream()
                 .collect(Collectors.toMap(Recruit::getHeroId, Function.identity(), (a, b) -> a));
 
+        // 十连保底：前 9 次全重复时，最后一次必定从「未拥有」池中抽取
+        List<Hero> unownedPool = allHeroes.stream()
+                .filter(h -> !mine.containsKey(h.getId()))
+                .collect(Collectors.toList());
+
         List<Map<String, Object>> results = new ArrayList<>();
         int refund = 0;
         int gained = 0;
 
         for (int i = 0; i < count; i++) {
-            Hero hero = allHeroes.get(random.nextInt(allHeroes.size()));
+            Hero hero;
+            boolean pity = count == 10 && i == count - 1 && gained == 0 && !unownedPool.isEmpty();
+            if (pity) {
+                // 保底：从前 9 次未抽到新武将时，第 10 次必从未拥有池抽取
+                hero = unownedPool.get(random.nextInt(unownedPool.size()));
+            } else {
+                hero = allHeroes.get(random.nextInt(allHeroes.size()));
+            }
             boolean dup = mine.containsKey(hero.getId());
             int singleRefund = 0;
             if (dup) {
@@ -196,6 +208,7 @@ public class RecruitServiceImpl implements RecruitService {
                 record.setCreateTime(LocalDateTime.now());
                 recruitMapper.insert(record);
                 mine.put(hero.getId(), record);
+                unownedPool.removeIf(h -> h.getId().equals(hero.getId()));
                 gained++;
             }
 
@@ -218,6 +231,7 @@ public class RecruitServiceImpl implements RecruitService {
             item.put("leadership", hero.getLeadership());
             item.put("duplicate", dup);
             item.put("refund", singleRefund);
+            item.put("pity", pity);
             results.add(item);
         }
 

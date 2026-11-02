@@ -819,23 +819,6 @@ onMounted(() => {
         </div>
 
         <p v-if="recruitMsg" class="rc-msg">{{ recruitMsg }}</p>
-
-        <template v-if="recruitedGenerals.length">
-          <h3 class="rc-sub">
-            帐下诸将
-            <span class="rc-sub-count">{{ recruitedGenerals.length }} 员</span>
-          </h3>
-          <ul class="rc-roster">
-            <li v-for="g in recruitedGenerals" :key="g.id" :data-f="g.faction">
-              <span class="rc-roster-seal">{{ factionName(g.faction).slice(-1) }}</span>
-              <span class="rc-roster-name">{{ g.name }}</span>
-              <span class="rc-roster-epithet">{{ g.epithet }}</span>
-              <span class="rc-roster-meta">{{ factionName(g.faction) }} · {{ g.typeName }}</span>
-              <span class="rc-roster-time">{{ g.recruitedAt }}</span>
-            </li>
-          </ul>
-        </template>
-        <p v-else class="tip">{{ recruitLoading ? '抽卡台开张中…' : '帐下尚无将领，抽一签试试手气' }}</p>
       </section>
 
       <!-- ========== 军机要务 ========== -->
@@ -911,19 +894,22 @@ onMounted(() => {
               v-for="(r, i) in gachaResults"
               :key="i"
               class="gacha-result"
-              :class="{ 'is-dup': r.duplicate }"
+              :class="{ 'is-dup': r.duplicate, 'is-pity': r.pity }"
               :data-f="r.faction"
               :style="{ '--ri': i }"
             >
-              <div class="gacha-result-seal">{{ factionName(r.faction).slice(-1) }}</div>
-              <div class="gacha-result-portrait">
-                <span class="hp-fallback" aria-hidden="true">{{ r.name.slice(0, 1) }}</span>
-                <img :src="heroImg(r.name)" :alt="r.name" @error="onHeroImgError" />
-              </div>
-              <div class="gacha-result-name">{{ r.name }}</div>
-              <div class="gacha-result-badge">
-                <span v-if="r.duplicate" class="dup-badge">已有 · 返 {{ r.refund }} 石</span>
-                <span v-else class="new-badge">新入帐</span>
+              <div class="gacha-result-flip">
+                <div class="gacha-result-seal">{{ factionName(r.faction).slice(-1) }}</div>
+                <div class="gacha-result-portrait">
+                  <span class="hp-fallback" aria-hidden="true">{{ r.name.slice(0, 1) }}</span>
+                  <img :src="heroImg(r.name)" :alt="r.name" @error="onHeroImgError" />
+                </div>
+                <div class="gacha-result-name">{{ r.name }}</div>
+                <div class="gacha-result-badge">
+                  <span v-if="r.pity" class="pity-badge">保底必得</span>
+                  <span v-else-if="r.duplicate" class="dup-badge">已有 · 返 {{ r.refund }} 石</span>
+                  <span v-else class="new-badge">新入帐</span>
+                </div>
               </div>
             </div>
           </div>
@@ -2235,91 +2221,6 @@ onMounted(() => {
   color: var(--text-ghost);
 }
 
-.rc-sub {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 26px 0 12px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--hair-soft);
-  font-family: var(--font-cal);
-  font-size: 16px;
-  font-weight: 400;
-  letter-spacing: 4px;
-  color: var(--gold-soft);
-}
-.rc-sub-count {
-  font-size: 12px;
-  letter-spacing: 1px;
-  color: var(--text-faint);
-}
-
-.rc-roster {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 10px;
-}
-.rc-roster li {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  border: 1px solid var(--hair-soft);
-  border-radius: 8px;
-  padding: 9px 12px;
-  background: var(--surface-soft);
-  font-size: 13px;
-  letter-spacing: 1px;
-}
-.rc-roster-seal {
-  flex: 0 0 auto;
-  width: 22px;
-  height: 22px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--gold);
-  border-radius: 4px;
-  font-size: 12px;
-  color: var(--gold);
-}
-.rc-roster li[data-f="wei"] .rc-roster-seal {
-  border-color: #5b9bd5;
-  color: #5b9bd5;
-}
-.rc-roster li[data-f="shu"] .rc-roster-seal {
-  border-color: #4caf7d;
-  color: #4caf7d;
-}
-.rc-roster li[data-f="wu"] .rc-roster-seal {
-  border-color: #3fbdb0;
-  color: #3fbdb0;
-}
-.rc-roster li[data-f="han"] .rc-roster-seal {
-  border-color: #d95f5f;
-  color: #d95f5f;
-}
-.rc-roster-name {
-  font-family: var(--font-cal);
-  letter-spacing: 2px;
-  color: var(--gold-soft);
-}
-.rc-roster-epithet {
-  font-size: 11px;
-  color: var(--text-mute);
-}
-.rc-roster-meta {
-  margin-left: auto;
-  font-size: 11px;
-  color: var(--text-faint);
-}
-.rc-roster-time {
-  font-size: 11px;
-  color: var(--text-ghost);
-}
-
 /* ============ 武将图鉴 · 拥有状态 ============ */
 .hero-card.is-owned {
   border-color: rgba(212, 175, 55, 0.45);
@@ -2478,9 +2379,47 @@ onMounted(() => {
   background: var(--surface-soft);
   animation: gacha-pop 0.4s ease both;
   animation-delay: calc(var(--ri) * 0.06s);
+  perspective: 600px;
+}
+.gacha-result-flip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  transform-style: preserve-3d;
+  animation: gacha-flip 0.5s ease both;
+  animation-delay: calc(var(--ri) * 0.06s + 0.05s);
 }
 .gacha-result.is-dup {
   opacity: 0.66;
+}
+.gacha-result.is-pity {
+  border-color: var(--gold);
+  box-shadow: 0 0 14px rgba(212, 175, 55, 0.5);
+  animation:
+    gacha-pop 0.4s ease both,
+    gacha-glow 1.2s ease-in-out infinite;
+  animation-delay: calc(var(--ri) * 0.06s), calc(var(--ri) * 0.06s + 0.4s);
+}
+@keyframes gacha-flip {
+  from {
+    opacity: 0;
+    transform: rotateY(90deg);
+  }
+  to {
+    opacity: 1;
+    transform: rotateY(0deg);
+  }
+}
+@keyframes gacha-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 8px rgba(212, 175, 55, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 20px rgba(212, 175, 55, 0.7);
+  }
 }
 .gacha-result-seal {
   position: absolute;
@@ -2531,6 +2470,12 @@ onMounted(() => {
 }
 .dup-badge {
   color: var(--text-faint);
+}
+.pity-badge {
+  color: var(--gold);
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-shadow: 0 0 6px rgba(212, 175, 55, 0.6);
 }
 
 @keyframes gacha-pop {

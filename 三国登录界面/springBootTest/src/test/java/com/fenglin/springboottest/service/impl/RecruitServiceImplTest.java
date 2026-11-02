@@ -207,4 +207,54 @@ class RecruitServiceImplTest {
         when(userService.findByUsername("云长")).thenReturn(user("云长", "han"));
         assertThrows(IllegalArgumentException.class, () -> service.gacha("云长", 3));
     }
+
+    private Hero heroWithId(long id, String name, String faction, int power, int leadership) {
+        Hero h = new Hero();
+        h.setId(id);
+        h.setName(name);
+        h.setFaction(faction);
+        h.setPower(power);
+        h.setLeadership(leadership);
+        h.setType("猛将");
+        h.setTypeName("猛将");
+        return h;
+    }
+
+    @Test
+    void gacha_ten_allDuplicates_lastOneGuaranteedUnowned() throws Exception {
+        when(userService.findByUsername("云长")).thenReturn(user("云长", "han"));
+
+        // 武将池：1 号已拥有，2 号未拥有
+        Hero owned = heroWithId(1L, "吕布", "han", 100, 87);
+        Hero unowned = heroWithId(2L, "赵云", "shu", 96, 88);
+        when(heroMapper.selectList(any(Wrapper.class))).thenReturn(List.of(owned, unowned));
+
+        Recruit existing = new Recruit();
+        existing.setUserId(1L);
+        existing.setHeroId(1L);
+        existing.setCost(0);
+        when(recruitMapper.selectList(any(Wrapper.class))).thenReturn(List.of(existing));
+
+        // 用反射替换 Random，让前 9 次 nextInt 都指向「已拥有」的 1 号（index 0），
+        // 从而确定性地走到保底分支：第 10 次从未拥有池抽出 2 号。
+        java.util.Random fixed = mock(java.util.Random.class);
+        // allHeroes.size()==2：前 9 次返回 0（抽到 1 号重复）；保底分支 nextInt(unownedPool.size()==1) 返回 0
+        when(fixed.nextInt(2)).thenReturn(0);
+        when(fixed.nextInt(1)).thenReturn(0);
+        java.lang.reflect.Field f = RecruitServiceImpl.class.getDeclaredField("random");
+        f.setAccessible(true);
+        f.set(service, fixed);
+
+        Map<String, Object> result = service.gacha("云长", 10);
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> results = (List<Map<String, Object>>) result.get("results");
+        assertEquals(10, results.size());
+        // 十连保底：最后一抽必定是未拥有的 2 号
+        Map<String, Object> last = results.get(results.size() - 1);
+        assertEquals(2L, ((Number) last.get("id")).longValue());
+        assertEquals(Boolean.TRUE, last.get("pity"));
+        assertEquals(Boolean.FALSE, last.get("duplicate"));
+        assertEquals(1, result.get("gained"));
+    }
 }
