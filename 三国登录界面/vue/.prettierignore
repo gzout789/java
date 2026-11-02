@@ -1,0 +1,10 @@
+node_modules/
+dist/
+dist-ssr/
+*.local
+login-standalone.html
+game-smoke.mjs
+.svelte-kit/
+.vite/
+*.log
+.DS_Store
