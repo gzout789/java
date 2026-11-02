@@ -6,6 +6,7 @@ import com.fenglin.springboottest.dto.LoginUserVO;
 import com.fenglin.springboottest.dto.RegisterRequest;
 import com.fenglin.springboottest.entity.User;
 import com.fenglin.springboottest.security.JwtUtil;
+import com.fenglin.springboottest.security.LoginRateLimiter;
 import com.fenglin.springboottest.service.UserService;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -37,11 +38,14 @@ public class ApiUserController {
     private final UserService userService;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
+    private final LoginRateLimiter rateLimiter;
 
-    public ApiUserController(UserService userService, PasswordEncoder passwordEncoder, JwtUtil jwtUtil) {
+    public ApiUserController(UserService userService, PasswordEncoder passwordEncoder,
+                             JwtUtil jwtUtil, LoginRateLimiter rateLimiter) {
         this.userService = userService;
         this.passwordEncoder = passwordEncoder;
         this.jwtUtil = jwtUtil;
+        this.rateLimiter = rateLimiter;
     }
 
     @PostMapping("/login")
@@ -55,8 +59,16 @@ public class ApiUserController {
 
         User user = userService.findByUsername(username);
         if (user == null || !passwordEncoder.matches(password, user.getPassword())) {
+            // 记录账号失败计数，超限时给更明确的提示
+            boolean locked = rateLimiter.recordAccountFailure(username);
+            if (locked) {
+                return ApiResult.fail("此账号尝试过多，已暂时锁定，请稍后再试");
+            }
             return ApiResult.fail("名号或虎符密令有误，请重新核对");
         }
+
+        // 登录成功，清除该账号的失败计数
+        rateLimiter.clearAccount(username);
 
         LoginUserVO vo = new LoginUserVO();
         vo.setUsername(user.getUsername());

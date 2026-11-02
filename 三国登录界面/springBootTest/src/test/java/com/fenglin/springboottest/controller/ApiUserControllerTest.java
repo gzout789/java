@@ -6,6 +6,7 @@ import com.fenglin.springboottest.dto.LoginUserVO;
 import com.fenglin.springboottest.dto.RegisterRequest;
 import com.fenglin.springboottest.entity.User;
 import com.fenglin.springboottest.security.JwtUtil;
+import com.fenglin.springboottest.security.LoginRateLimiter;
 import com.fenglin.springboottest.service.UserService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -25,13 +26,15 @@ class ApiUserControllerTest {
     private UserService userService;
     private PasswordEncoder passwordEncoder;
     private JwtUtil jwtUtil;
+    private LoginRateLimiter rateLimiter;
 
     @BeforeEach
     void setUp() {
         userService = mock(UserService.class);
         passwordEncoder = mock(PasswordEncoder.class);
         jwtUtil = mock(JwtUtil.class);
-        controller = new ApiUserController(userService, passwordEncoder, jwtUtil);
+        rateLimiter = mock(LoginRateLimiter.class);
+        controller = new ApiUserController(userService, passwordEncoder, jwtUtil, rateLimiter);
     }
 
     private User user(String name, String faction, String encodedPwd) {
@@ -62,12 +65,39 @@ class ApiUserControllerTest {
         when(userService.findByUsername("云长"))
                 .thenReturn(user("云长", "shu", "$2a$10$hashed"));
         when(passwordEncoder.matches("wrong", "$2a$10$hashed")).thenReturn(false);
+        when(rateLimiter.recordAccountFailure("云长")).thenReturn(false);
 
         ApiResult<LoginUserVO> result = controller.login(req("云长", "wrong"));
 
         assertFalse(result.isSuccess());
         assertTrue(result.getMessage().contains("有误"));
         assertNull(result.getData());
+        verify(rateLimiter).recordAccountFailure("云长");
+    }
+
+    @Test
+    void login_wrongPassword_locked_returnsLockHint() {
+        when(userService.findByUsername("云长"))
+                .thenReturn(user("云长", "shu", "$2a$10$hashed"));
+        when(passwordEncoder.matches("wrong", "$2a$10$hashed")).thenReturn(false);
+        when(rateLimiter.recordAccountFailure("云长")).thenReturn(true); // 已超限
+
+        ApiResult<LoginUserVO> result = controller.login(req("云长", "wrong"));
+
+        assertFalse(result.isSuccess());
+        assertTrue(result.getMessage().contains("锁定"));
+    }
+
+    @Test
+    void login_success_clearsFailureCounter() {
+        when(userService.findByUsername("云长"))
+                .thenReturn(user("云长", "shu", "$2a$10$hashed"));
+        when(passwordEncoder.matches("danfeng123", "$2a$10$hashed")).thenReturn(true);
+        when(jwtUtil.create("云长")).thenReturn("token-abc");
+
+        controller.login(req("云长", "danfeng123"));
+
+        verify(rateLimiter).clearAccount("云长");
     }
 
     @Test

@@ -10,6 +10,7 @@ import com.fenglin.springboottest.mapper.AdminUserMapper;
 import com.fenglin.springboottest.mapper.HeroMapper;
 import com.fenglin.springboottest.mapper.RecruitMapper;
 import com.fenglin.springboottest.security.JwtUtil;
+import com.fenglin.springboottest.security.LoginRateLimiter;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -63,14 +64,17 @@ public class AdminController {
     private final RecruitMapper recruitMapper;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
+    private final LoginRateLimiter rateLimiter;
 
     public AdminController(AdminUserMapper adminUserMapper, HeroMapper heroMapper,
-                           RecruitMapper recruitMapper, PasswordEncoder passwordEncoder, JwtUtil jwtUtil) {
+                           RecruitMapper recruitMapper, PasswordEncoder passwordEncoder, JwtUtil jwtUtil,
+                           LoginRateLimiter rateLimiter) {
         this.adminUserMapper = adminUserMapper;
         this.heroMapper = heroMapper;
         this.recruitMapper = recruitMapper;
         this.passwordEncoder = passwordEncoder;
         this.jwtUtil = jwtUtil;
+        this.rateLimiter = rateLimiter;
     }
 
     /* ==================== 登录 ==================== */
@@ -87,8 +91,15 @@ public class AdminController {
         AdminUser admin = adminUserMapper.selectOne(
                 new LambdaQueryWrapper<AdminUser>().eq(AdminUser::getUsername, username));
         if (admin == null || !passwordEncoder.matches(password, admin.getPassword())) {
+            boolean locked = rateLimiter.recordAccountFailure(username);
+            if (locked) {
+                return ApiResult.fail("此管理账号尝试过多，已暂时锁定，请稍后再试");
+            }
             return ApiResult.fail("管理账号或密码有误");
         }
+
+        // 登录成功，清除失败计数
+        rateLimiter.clearAccount(username);
 
         // 记录最近登录时间，失败不影响登录本身
         try {
