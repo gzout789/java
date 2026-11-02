@@ -20,6 +20,9 @@ log/
 # 自带的 Maven 发行包（二进制，体积大，不入库；构建请用系统 Maven 或 mvnw 自动下载）
 springBootTest/tools/
 
+# 三国登录界面根目录误生成的空壳 lock 文件（真正的 lock 在 vue/ 下）
+三国登录界面/package-lock.json
+
 # ===================== Node / Vue (fanren-login-vue) =====================
 node_modules/
 dist/
