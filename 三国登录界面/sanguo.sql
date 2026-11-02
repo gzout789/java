@@ -1,7 +1,7 @@
 /*
  Navicat Premium Dump SQL
 
- Source Server         : test
+ Source Server         : localhost_3306
  Source Server Type    : MySQL
  Source Server Version : 80039 (8.0.39)
  Source Host           : localhost:3306
@@ -11,7 +11,7 @@
  Target Server Version : 80039 (8.0.39)
  File Encoding         : 65001
 
- Date: 30/10/2026 15:14:09
+ Date: 02/11/2026 10:02:56
 */
 
 SET NAMES utf8mb4;
@@ -36,7 +36,26 @@ CREATE TABLE `admin_user`  (
 -- ----------------------------
 -- Records of admin_user
 -- ----------------------------
-INSERT INTO `admin_user` VALUES (1, 'admin', '$2a$10$jLM5E.VmLHKA9g7v8Qpbq.mBEYvzwXv/CoLIre07R9graOQClFgK6', 'admin', '内置管理员', '2026-10-23 14:38:07', '2026-10-23 14:16:19');
+INSERT INTO `admin_user` VALUES (1, 'admin', '$2a$10$jLM5E.VmLHKA9g7v8Qpbq.mBEYvzwXv/CoLIre07R9graOQClFgK6', 'admin', '内置管理员', '2026-11-02 09:27:41', '2026-10-23 14:16:19');
+
+-- ----------------------------
+-- Table structure for gacha_log
+-- ----------------------------
+DROP TABLE IF EXISTS `gacha_log`;
+CREATE TABLE `gacha_log`  (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `user_id` bigint NOT NULL COMMENT '抽卡者（将军账号ID）',
+  `hero_id` bigint NULL DEFAULT NULL COMMENT '抽中的武将ID',
+  `cost` int NOT NULL DEFAULT 0 COMMENT '本次消耗军饷（石）',
+  `refund` int NOT NULL DEFAULT 0 COMMENT '重复返还军饷（石）',
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '抽卡时间',
+  PRIMARY KEY (`id`) USING BTREE,
+  INDEX `idx_gacha_user`(`user_id` ASC) USING BTREE
+) ENGINE = InnoDB AUTO_INCREMENT = 1 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '抽卡流水表' ROW_FORMAT = Dynamic;
+
+-- ----------------------------
+-- Records of gacha_log
+-- ----------------------------
 
 -- ----------------------------
 -- Table structure for hero
@@ -181,7 +200,7 @@ CREATE TABLE `user`  (
   `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE INDEX `uk_username`(`username` ASC) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 6 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '三国将军账号表' ROW_FORMAT = DYNAMIC;
+) ENGINE = InnoDB AUTO_INCREMENT = 7 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '三国将军账号表' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Records of user
@@ -191,5 +210,6 @@ INSERT INTO `user` VALUES (2, '翼德', '$2a$10$AnBfDW1BW7lJolQg.cYEguQrA10/L5gz
 INSERT INTO `user` VALUES (3, '子龙', '$2a$10$Znz0Lt89UnOiBpgBFG5o9.ganNoxeGawi9SgtC2tXVPeuRBvkB7g2', 'shu', '2026-10-23 14:07:04', '2026-10-23 14:07:04');
 INSERT INTO `user` VALUES (4, '孟德', '$2a$10$z4M8XjpIL.vF6OnQaNdoV.mIZurlToKumqELcvF0O.PALHCxwzfsm', 'wei', '2026-10-23 14:07:04', '2026-10-23 14:07:04');
 INSERT INTO `user` VALUES (5, '仲谋', '$2a$10$ja9r14mt2WMLE.AbDKZ08uT6MoEvR1LlyxqopbgcXClfPGdvmSqB2', 'wu', '2026-10-23 14:07:04', '2026-10-23 14:07:04');
+INSERT INTO `user` VALUES (6, '以德', '$2a$10$8NFmHhfEcFjusoY4DFBdz.DsHvJ4w6cRmAVLGEeP2OzjcveDo5XU.', 'han', '2026-11-02 09:55:04', '2026-11-02 09:55:04');
 
 SET FOREIGN_KEY_CHECKS = 1;
