@@ -2,6 +2,14 @@
 chcp 936 >nul
 title 三国后端-启动
 cd /d "%~dp0"
+
+rem ---- 0. 加载 .env 环境变量（若存在）----
+if exist ".env" (
+    for /f "usebackq tokens=1,* delims== eol=#" %%a in (".env") do (
+        set "%%a=%%b"
+    )
+    echo [OK] 已加载 .env 环境变量
+)
 echo ============================================
 echo   三国登录系统 - 后端启动脚本 (端口 8081)
 echo ============================================

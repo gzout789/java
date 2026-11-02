@@ -32,6 +32,18 @@ dist-ssr/
 .env.*
 !.env.example
 
+# ===================== 三国登录界面 截图/无头浏览器产物 =====================
+vue/.shots/
+vue/screenshots/
+vue/_chrome_profile/
+vue/_shots/
+vue/docs-shot-*.png
+vue/smoke_out.txt
+vue/.health.tmp
+vue/.e2e.tmp
+vue/.fe_code.tmp
+springBootTest/.health.tmp
+
 # ===================== 操作系统 / 编辑器 =====================
 .DS_Store
 Thumbs.db

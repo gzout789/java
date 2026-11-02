@@ -13,6 +13,7 @@ import com.fenglin.springboottest.mapper.UserMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.core.annotation.Order;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -39,6 +40,18 @@ public class DemoDataSeeder implements ApplicationRunner {
     private final TaskMapper taskMapper;
     private final NewsMapper newsMapper;
     private final PasswordEncoder passwordEncoder;
+
+    /** 后台管理账号（首次建库播种，之后改密码不会被覆盖），来自环境变量，默认 admin */
+    @Value("${sanguo.seed.admin-username:admin}")
+    private String adminUsername;
+
+    /** 后台管理初始密码，来自环境变量，默认 admin123 */
+    @Value("${sanguo.seed.admin-password:admin123}")
+    private String adminPassword;
+
+    /** 演示账号统一初始密码，来自环境变量，默认 danfeng123 */
+    @Value("${sanguo.seed.demo-password:danfeng123}")
+    private String demoPassword;
 
     public DemoDataSeeder(UserMapper userMapper, AdminUserMapper adminUserMapper, HeroMapper heroMapper,
                           TaskMapper taskMapper, NewsMapper newsMapper, PasswordEncoder passwordEncoder) {
@@ -169,19 +182,19 @@ public class DemoDataSeeder implements ApplicationRunner {
         LEGACY_HPS.put("吕布", 5);
     }
 
-    /** 后台管理账号：admin / admin123（只建一次，改过密码不会被覆盖） */
+    /** 后台管理账号（只建一次，改过密码不会被覆盖） */
     private void seedAdmin() {
         if (adminUserMapper.selectCount(null) > 0) {
             return;
         }
         AdminUser admin = new AdminUser();
-        admin.setUsername("admin");
-        admin.setPassword(passwordEncoder.encode("admin123"));
+        admin.setUsername(adminUsername);
+        admin.setPassword(passwordEncoder.encode(adminPassword));
         admin.setRole("admin");
         admin.setRemark("内置管理员");
         admin.setCreateTime(LocalDateTime.now());
         adminUserMapper.insert(admin);
-        log.info("已创建后台管理账号：admin / admin123");
+        log.info("已创建后台管理账号：{} / {}", adminUsername, adminPassword);
     }
 
     private void seedUsers() {
@@ -199,13 +212,13 @@ public class DemoDataSeeder implements ApplicationRunner {
         for (String[] row : demo) {
             User user = new User();
             user.setUsername(row[0]);
-            user.setPassword(passwordEncoder.encode("danfeng123"));
+            user.setPassword(passwordEncoder.encode(demoPassword));
             user.setFaction(row[1]);
             user.setCreateTime(now);
             user.setUpdateTime(now);
             userMapper.insert(user);
         }
-        log.info("已播种 {} 个演示账号（演示账号：云长 / danfeng123）", demo.length);
+        log.info("已播种 {} 个演示账号（演示账号：云长 / {}）", demo.length, demoPassword);
     }
 
     private void seedHeroes() {
