@@ -4,12 +4,17 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fenglin.springboottest.common.ApiResult;
 import com.fenglin.springboottest.entity.Hero;
 import com.fenglin.springboottest.entity.News;
+import com.fenglin.springboottest.entity.Recruit;
 import com.fenglin.springboottest.entity.Task;
+import com.fenglin.springboottest.entity.User;
 import com.fenglin.springboottest.mapper.HeroMapper;
 import com.fenglin.springboottest.mapper.NewsMapper;
+import com.fenglin.springboottest.mapper.RecruitMapper;
 import com.fenglin.springboottest.mapper.TaskMapper;
+import com.fenglin.springboottest.service.UserService;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestAttribute;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -20,6 +25,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * 大帐内容接口：英雄榜 / 军机要务 / 烽火快报 / 全局搜索
@@ -32,17 +38,23 @@ public class ContentController {
     private final HeroMapper heroMapper;
     private final TaskMapper taskMapper;
     private final NewsMapper newsMapper;
+    private final RecruitMapper recruitMapper;
+    private final UserService userService;
 
-    public ContentController(HeroMapper heroMapper, TaskMapper taskMapper, NewsMapper newsMapper) {
+    public ContentController(HeroMapper heroMapper, TaskMapper taskMapper, NewsMapper newsMapper,
+                             RecruitMapper recruitMapper, UserService userService) {
         this.heroMapper = heroMapper;
         this.taskMapper = taskMapper;
         this.newsMapper = newsMapper;
+        this.recruitMapper = recruitMapper;
+        this.userService = userService;
     }
 
     @GetMapping("/heroes")
-    public ApiResult<List<Hero>> heroes(@RequestParam(required = false) String keyword,
-                                        @RequestParam(required = false) String faction,
-                                        @RequestParam(required = false) String type) {
+    public ApiResult<List<Map<String, Object>>> heroes(@RequestAttribute("currentUser") String username,
+                                                       @RequestParam(required = false) String keyword,
+                                                       @RequestParam(required = false) String faction,
+                                                       @RequestParam(required = false) String type) {
         LambdaQueryWrapper<Hero> wrapper = new LambdaQueryWrapper<>();
         if (StringUtils.hasText(keyword)) {
             String kw = keyword.trim();
@@ -57,7 +69,42 @@ public class ContentController {
             wrapper.eq(Hero::getType, type);
         }
         wrapper.orderByAsc(Hero::getSortOrder).orderByAsc(Hero::getId);
-        return ApiResult.ok(heroMapper.selectList(wrapper));
+        List<Hero> heroes = heroMapper.selectList(wrapper);
+
+        // 当前将军已拥有的武将 ID 集合
+        Set<Long> owned = ownedHeroIds(username);
+
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (Hero hero : heroes) {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("id", hero.getId());
+            m.put("name", hero.getName());
+            m.put("epithet", hero.getEpithet());
+            m.put("faction", hero.getFaction());
+            m.put("type", hero.getType());
+            m.put("typeName", hero.getTypeName());
+            m.put("description", hero.getDescription());
+            m.put("power", hero.getPower());
+            m.put("leadership", hero.getLeadership());
+            m.put("hp", hero.getHp());
+            m.put("skillName", hero.getSkillName());
+            m.put("skillType", hero.getSkillType());
+            m.put("skillDesc", hero.getSkillDesc());
+            m.put("owned", owned.contains(hero.getId()));
+            result.add(m);
+        }
+        return ApiResult.ok(result);
+    }
+
+    /** 查询当前将军已拥有的武将 ID（抽卡/招募入帐的都算） */
+    private Set<Long> ownedHeroIds(String username) {
+        User user = userService.findByUsername(username);
+        if (user == null) {
+            return Set.of();
+        }
+        return recruitMapper.selectList(
+                        new LambdaQueryWrapper<Recruit>().eq(Recruit::getUserId, user.getId()))
+                .stream().map(Recruit::getHeroId).collect(Collectors.toSet());
     }
 
     /** 筛选项元数据：阵营列表 + 兵种类型（含数量与所属阵营） */

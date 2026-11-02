@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestAttribute;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Map;
@@ -38,6 +39,18 @@ public class RecruitController {
             Object hero = data.get("hero");
             String name = hero instanceof Map ? String.valueOf(((Map<?, ?>) hero).get("name")) : "此将";
             return ApiResult.ok(name + " 已入帐下，听候调遣", data);
+        } catch (IllegalArgumentException e) {
+            return ApiResult.fail(e.getMessage());
+        }
+    }
+
+    /** 抽卡：count=1 单抽、count=10 十连 */
+    @PostMapping("/recruit/gacha")
+    public ApiResult<Map<String, Object>> gacha(@RequestAttribute("currentUser") String username,
+                                                @RequestParam(value = "count", defaultValue = "1") int count) {
+        try {
+            Map<String, Object> data = recruitService.gacha(username, count);
+            return ApiResult.ok("抽卡完成", data);
         } catch (IllegalArgumentException e) {
             return ApiResult.fail(e.getMessage());
         }

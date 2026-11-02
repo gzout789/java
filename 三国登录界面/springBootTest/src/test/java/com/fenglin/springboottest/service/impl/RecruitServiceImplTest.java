@@ -5,6 +5,7 @@ import com.fenglin.springboottest.dto.RecruitGeneralVO;
 import com.fenglin.springboottest.entity.Hero;
 import com.fenglin.springboottest.entity.Recruit;
 import com.fenglin.springboottest.entity.User;
+import com.fenglin.springboottest.mapper.GachaLogMapper;
 import com.fenglin.springboottest.mapper.HeroMapper;
 import com.fenglin.springboottest.mapper.RecruitMapper;
 import com.fenglin.springboottest.service.UserService;
@@ -30,13 +31,17 @@ class RecruitServiceImplTest {
     private UserService userService;
     private HeroMapper heroMapper;
     private RecruitMapper recruitMapper;
+    private GachaLogMapper gachaLogMapper;
 
     @BeforeEach
     void setUp() {
         userService = mock(UserService.class);
         heroMapper = mock(HeroMapper.class);
         recruitMapper = mock(RecruitMapper.class);
-        service = new RecruitServiceImpl(userService, heroMapper, recruitMapper);
+        gachaLogMapper = mock(GachaLogMapper.class);
+        // 默认无抽卡流水
+        when(gachaLogMapper.selectList(any(Wrapper.class))).thenReturn(Collections.emptyList());
+        service = new RecruitServiceImpl(userService, heroMapper, recruitMapper, gachaLogMapper);
     }
 
     private User user(String name, String faction) {
@@ -159,5 +164,47 @@ class RecruitServiceImplTest {
                 .filter(g -> "诸葛亮".equals(g.getName())).findFirst().orElseThrow();
         assertFalse(zgl.getSameFaction());
         assertEquals(1150, zgl.getCost());
+    }
+
+    @Test
+    void gacha_single_insufficientGold_throws() {
+        when(userService.findByUsername("云长")).thenReturn(user("云长", "han"));
+
+        // 已用尽军饷（招募花费 8000）
+        Recruit expensive = new Recruit();
+        expensive.setUserId(1L);
+        expensive.setHeroId(1L);
+        expensive.setCost(8000);
+        when(recruitMapper.selectList(any(Wrapper.class))).thenReturn(List.of(expensive));
+
+        IllegalArgumentException ex = assertThrows(
+                IllegalArgumentException.class, () -> service.gacha("云长", 1));
+        assertTrue(ex.getMessage().contains("军饷不足"));
+    }
+
+    @Test
+    void gacha_single_drawsHeroAndReturnsResults() {
+        when(userService.findByUsername("云长")).thenReturn(user("云长", "han"));
+        Hero lvbu = hero("吕布", "han", 100, 87);
+        Hero zhao = hero("赵云", "shu", 96, 88);
+        when(heroMapper.selectList(any(Wrapper.class))).thenReturn(List.of(lvbu, zhao));
+        when(recruitMapper.selectList(any(Wrapper.class))).thenReturn(Collections.emptyList());
+
+        Map<String, Object> result = service.gacha("云长", 1);
+
+        assertEquals(500, result.get("cost"));
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> results = (List<Map<String, Object>>) result.get("results");
+        assertEquals(1, results.size());
+        // 抽到的一定是这两位之一（未拥有，gained=1）
+        assertEquals(1, result.get("gained"));
+        // 至少插入一条 recruit 记录（新武将入帐）
+        verify(recruitMapper, atLeastOnce()).insert(any(Recruit.class));
+    }
+
+    @Test
+    void gacha_invalidCount_throws() {
+        when(userService.findByUsername("云长")).thenReturn(user("云长", "han"));
+        assertThrows(IllegalArgumentException.class, () -> service.gacha("云长", 3));
     }
 }

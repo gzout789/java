@@ -25,7 +25,7 @@ echo   [OK] Java 已就绪
 set "NPM=npm"
 where npm >nul 2>nul
 if errorlevel 1 (
-    set "NPM=C:\Users\user\.workbuddy\binaries\node\versions\22.22.2-3\node.exe C:\Users\user\.workbuddy\binaries\node\versions\22.22.2-3\node_modules\npm\bin\npm-cli.js"
+    set "NPM=C:\Users\Administrator\.workbuddy\binaries\node\versions\22.22.2-2\node.exe C:\Users\Administrator\.workbuddy\binaries\node\versions\22.22.2-2\node_modules\npm\bin\npm-cli.js"
 )
 if not exist "%~dp0vue\node_modules" (
     echo   [提示] 前端依赖未安装，首次安装约需 1-2 分钟...

@@ -42,8 +42,8 @@ const greeting = computed(() => {
 /* ---------------- 视图切换 ---------------- */
 const VIEWS = [
   { key: 'overview', label: '总览' },
-  { key: 'heroes', label: '英雄榜' },
-  { key: 'recruit', label: '点将台' },
+  { key: 'heroes', label: '武将图鉴' },
+  { key: 'recruit', label: '招募抽卡' },
   { key: 'tasks', label: '军机要务' },
   { key: 'news', label: '烽火快报' }
 ]
@@ -122,7 +122,7 @@ async function loadStats() {
   }
 }
 
-/* ---------------- 英雄榜 ---------------- */
+/* ---------------- 武将图鉴 ---------------- */
 const heroes = ref([])
 const heroesMeta = ref([])
 const heroTypes = ref([])
@@ -130,6 +130,7 @@ const meta = ref({ factions: [], types: [] })
 const heroFaction = ref('all')
 const heroType = ref('all')
 const heroKeyword = ref('')
+const heroOwned = ref('all') // all / owned / unowned
 
 const factionChips = computed(() => {
   const list =
@@ -149,6 +150,15 @@ const typeChips = computed(() => [
   { key: 'all', label: '全部' },
   ...availableTypes.value.map((t) => ({ key: t.name, label: `${t.name} ${t.count}` }))
 ])
+
+// 拥有状态分组
+const ownedHeroes = computed(() => heroes.value.filter((h) => h.owned))
+const unownedHeroes = computed(() => heroes.value.filter((h) => !h.owned))
+const filteredHeroes = computed(() => {
+  if (heroOwned.value === 'owned') return ownedHeroes.value
+  if (heroOwned.value === 'unowned') return unownedHeroes.value
+  return heroes.value
+})
 
 async function loadHeroes() {
   const params = new URLSearchParams()
@@ -324,12 +334,17 @@ watch(newsKeyword, () => {
   newsTimer = setTimeout(loadNews, 300)
 })
 
-/* ---------------- 点将台（招募） ---------------- */
+/* ---------------- 招募抽卡 ---------------- */
 const recruit = ref(null)
 const recruitLoading = ref(false)
 const recruitingId = ref(null)
 const recruitMsg = ref('')
-const recruitFaction = ref('all')
+
+// 抽卡结果弹窗
+const gachaModalOpen = ref(false)
+const gachaResults = ref([])
+const gachaGained = ref(0)
+const gachaRefund = ref(0)
 
 let recruitMsgTimer = null
 function flashRecruitMsg(text) {
@@ -339,19 +354,10 @@ function flashRecruitMsg(text) {
 }
 
 const gold = computed(() => (recruit.value ? recruit.value.gold : null))
-
-const recruitChips = computed(() => [
-  { key: 'all', label: '全部' },
-  ...FACTIONS.map((f) => ({ key: f.key, label: f.name }))
-])
+const gachaSingleCost = computed(() => (recruit.value ? recruit.value.gachaSingleCost : 500))
+const gachaTenCost = computed(() => (recruit.value ? recruit.value.gachaTenCost : 4500))
 
 const recruitAll = computed(() => (recruit.value && recruit.value.generals) || [])
-
-const recruitCandidates = computed(() =>
-  recruitAll.value.filter(
-    (g) => !g.recruited && (recruitFaction.value === 'all' || g.faction === recruitFaction.value)
-  )
-)
 
 const recruitedGenerals = computed(() => recruitAll.value.filter((g) => g.recruited))
 
@@ -367,31 +373,46 @@ async function loadRecruit() {
   }
 }
 
-async function doRecruit(hero) {
+/** 抽卡：count=1 单抽，count=10 十连 */
+async function doGacha(count) {
   if (recruitingId.value) return
-  if (gold.value !== null && gold.value < hero.cost) {
-    flashRecruitMsg(`军饷不足，尚差 ${hero.cost - gold.value} 石`)
+  const cost = count === 10 ? gachaTenCost.value : gachaSingleCost.value
+  if (gold.value !== null && gold.value < cost) {
+    flashRecruitMsg(`军饷不足，尚差 ${cost - gold.value} 石`)
     return
   }
-  recruitingId.value = hero.id
+  recruitingId.value = 'gacha'
   try {
-    const res = await fetch('/api/recruit', {
+    const res = await fetch(`/api/recruit/gacha?count=${count}`, {
       method: 'POST',
-      headers: authHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ heroId: hero.id })
+      headers: authHeaders({ 'Content-Type': 'application/json' })
     })
     if (res.status === 401) {
       handleUnauthorized()
       return
     }
     const data = await res.json()
-    flashRecruitMsg(data.message || (data.success ? '招募成功' : '招募未成'))
-    if (data.success) await loadRecruit()
+    if (data.success) {
+      gachaResults.value = data.data.results || []
+      gachaGained.value = data.data.gained || 0
+      gachaRefund.value = data.data.refund || 0
+      gachaModalOpen.value = true
+      await loadRecruit()
+      // 同步刷新武将图鉴
+      loadHeroes()
+    } else {
+      flashRecruitMsg(data.message || '抽卡未成')
+    }
   } catch {
-    flashRecruitMsg('与军中失联，招募未成')
+    flashRecruitMsg('与军中失联，抽卡未成')
   } finally {
     recruitingId.value = null
   }
+}
+
+function closeGachaModal() {
+  gachaModalOpen.value = false
+  gachaResults.value = []
 }
 
 /* ---------------- 退出 ---------------- */
@@ -510,7 +531,7 @@ onMounted(() => {
           <div v-if="searchOpen" class="search-panel">
             <template v-if="searchTotal > 0">
               <div v-if="searchResult.heroes.length" class="sr-group">
-                <div class="sr-title">英雄榜</div>
+                <div class="sr-title">武将图鉴</div>
                 <button
                   v-for="h in searchResult.heroes"
                   :key="'h' + h.id"
@@ -653,8 +674,8 @@ onMounted(() => {
 
           <section class="card" style="--i: 5">
             <h2 class="card-title more" @click="goView('recruit')">
-              点将台
-              <span class="more-link">前往点将 →</span>
+              招募抽卡
+              <span class="more-link">前往抽卡 →</span>
             </h2>
             <div class="total-line">
               <span class="total-num">{{ recruit ? recruit.recruitedCount : '—' }}</span>
@@ -669,16 +690,16 @@ onMounted(() => {
                 <span class="rc-ov-name">{{ g.name }}</span>
                 <span class="rc-ov-meta">{{ g.typeName }}</span>
               </li>
-              <li v-if="!recruitedGenerals.length" class="rc-ov-empty">帐下尚虚，速去点将台招贤</li>
+              <li v-if="!recruitedGenerals.length" class="rc-ov-empty">帐下尚虚，速去招募抽卡招贤</li>
             </ul>
           </section>
         </div>
       </template>
 
-      <!-- ========== 英雄榜 ========== -->
+      <!-- ========== 武将图鉴 ========== -->
       <section v-else-if="activeView === 'heroes'" class="card board">
         <div class="board-head">
-          <h2 class="card-title nomargin">英雄榜</h2>
+          <h2 class="card-title nomargin">武将图鉴</h2>
           <div class="chips">
             <button
               v-for="c in factionChips"
@@ -704,8 +725,32 @@ onMounted(() => {
           </button>
         </div>
 
+        <div class="chips" style="margin: 0 0 14px">
+          <button
+            type="button"
+            :class="['chip', 'ink-ripple-host', 'sub', { active: heroOwned === 'all' }]"
+            @click="heroOwned = 'all'; ripple($event)"
+          >
+            全部 {{ heroes.length }}
+          </button>
+          <button
+            type="button"
+            :class="['chip', 'ink-ripple-host', 'sub', { active: heroOwned === 'owned' }]"
+            @click="heroOwned = 'owned'; ripple($event)"
+          >
+            已拥有 {{ ownedHeroes.length }}
+          </button>
+          <button
+            type="button"
+            :class="['chip', 'ink-ripple-host', 'sub', { active: heroOwned === 'unowned' }]"
+            @click="heroOwned = 'unowned'; ripple($event)"
+          >
+            未拥有 {{ unownedHeroes.length }}
+          </button>
+        </div>
+
         <div class="hero-grid">
-          <article v-for="(h, i) in heroes" :key="h.id" class="hero-card" :style="{ '--i': i }">
+          <article v-for="(h, i) in filteredHeroes" :key="h.id" class="hero-card" :class="{ 'is-owned': h.owned }" :style="{ '--i': i }">
             <div class="hc-top">
               <span class="hc-seal" :data-f="h.faction">{{ factionName(h.faction).slice(-1) }}</span>
               <div class="hc-name">
@@ -714,7 +759,7 @@ onMounted(() => {
               </div>
               <span class="hc-fac" :data-f="h.faction">{{ factionName(h.faction) }}</span>
             </div>
-            <div class="hc-portrait" :data-f="h.faction">
+            <div class="hc-portrait" :data-f="h.faction" :class="{ 'hp-dim': !h.owned }">
               <span class="hp-fallback" aria-hidden="true">{{ h.name.slice(0, 1) }}</span>
               <span class="hp-fallback-name">{{ h.name }}</span>
               <img
@@ -724,6 +769,7 @@ onMounted(() => {
                 decoding="async"
                 @error="onHeroImgError"
               />
+              <span v-if="h.owned" class="hc-owned-badge">已入帐</span>
             </div>
             <p class="hc-desc">{{ h.description }}</p>
             <div class="hc-tags">
@@ -733,13 +779,13 @@ onMounted(() => {
             </div>
           </article>
         </div>
-        <p v-if="!heroes.length" class="tip">榜上暂无符合条件的将军</p>
+        <p v-if="!filteredHeroes.length" class="tip">榜上暂无符合条件的将军</p>
       </section>
 
-      <!-- ========== 点将台 ========== -->
+      <!-- ========== 招募抽卡 ========== -->
       <section v-else-if="activeView === 'recruit'" class="card board recruit">
         <div class="board-head">
-          <h2 class="card-title nomargin">点将台</h2>
+          <h2 class="card-title nomargin">招募抽卡</h2>
           <div class="gold-box">
             <span class="gold-label">军饷</span>
             <span class="gold-num">{{ recruit ? recruit.gold : '—' }}</span>
@@ -748,74 +794,31 @@ onMounted(() => {
           </div>
         </div>
 
-        <div class="chips" style="margin: 0 0 8px">
+        <p class="rc-hint">抛却名册，随缘点将。单抽 500 石，十连 4500 石（九折）；抽到已入帐的武将，折半返还军饷。</p>
+
+        <!-- 抽卡操作区 -->
+        <div class="gacha-panel">
           <button
-            v-for="c in recruitChips"
-            :key="c.key"
             type="button"
-            :class="['chip', 'ink-ripple-host', { active: recruitFaction === c.key }]"
-            @click="recruitFaction = c.key; ripple($event)"
+            class="gacha-btn gacha-single ink-ripple-host"
+            :disabled="recruitingId === 'gacha' || (gold !== null && gold < gachaSingleCost)"
+            @click="doGacha(1); ripple($event)"
           >
-            {{ c.label }}
+            <span class="gacha-btn-title">单 抽</span>
+            <span class="gacha-btn-cost">{{ gachaSingleCost }} 石</span>
+          </button>
+          <button
+            type="button"
+            class="gacha-btn gacha-ten ink-ripple-host"
+            :disabled="recruitingId === 'gacha' || (gold !== null && gold < gachaTenCost)"
+            @click="doGacha(10); ripple($event)"
+          >
+            <span class="gacha-btn-title">十 连</span>
+            <span class="gacha-btn-cost">{{ gachaTenCost }} 石</span>
           </button>
         </div>
 
-        <p class="rc-hint">同阵营按原价招揽；他阵营需加价五成。军饷有限，先招心腹，再图虎将。</p>
-
-        <div class="hero-grid">
-          <article v-for="(g, i) in recruitCandidates" :key="g.id" class="hero-card rc-card" :style="{ '--i': i }">
-            <div class="hc-top">
-              <span class="hc-seal" :data-f="g.faction">{{ factionName(g.faction).slice(-1) }}</span>
-              <div class="hc-name">
-                <b>{{ g.name }}</b>
-                <i>{{ g.epithet }}</i>
-              </div>
-              <span class="hc-fac" :data-f="g.faction">{{ factionName(g.faction) }}</span>
-            </div>
-
-            <div class="hc-portrait" :data-f="g.faction">
-              <span class="hp-fallback" aria-hidden="true">{{ g.name.slice(0, 1) }}</span>
-              <span class="hp-fallback-name">{{ g.name }}</span>
-              <img
-                :src="heroImg(g.name)"
-                :alt="g.name"
-                loading="lazy"
-                decoding="async"
-                @error="onHeroImgError"
-              />
-              <span v-if="!g.sameFaction" class="rc-foreign">他阵营 +50%</span>
-            </div>
-
-            <p class="hc-desc">{{ g.description }}</p>
-
-            <div class="hc-tags">
-              <span class="hc-type" :data-f="g.faction">{{ g.typeName }}</span>
-              <span v-if="g.power != null" class="hc-power">武力 {{ g.power }}</span>
-              <span v-if="g.leadership != null" class="hc-power">统率 {{ g.leadership }}</span>
-            </div>
-
-            <div class="rc-foot">
-              <span class="rc-cost"><b>{{ g.cost }}</b> 石</span>
-              <button
-                type="button"
-                class="rc-btn ink-ripple-host"
-                :disabled="recruitingId === g.id || (gold !== null && gold < g.cost)"
-                @click="doRecruit(g); ripple($event)"
-              >
-                {{
-                  recruitingId === g.id
-                    ? '招揽中…'
-                    : gold !== null && gold < g.cost
-                      ? '军饷不足'
-                      : '招 募'
-                }}
-              </button>
-            </div>
-          </article>
-        </div>
-        <p v-if="!recruitCandidates.length" class="tip">
-          {{ recruitLoading ? '点将台开张中…' : '此旗号下已无未招之将' }}
-        </p>
+        <p v-if="recruitMsg" class="rc-msg">{{ recruitMsg }}</p>
 
         <template v-if="recruitedGenerals.length">
           <h3 class="rc-sub">
@@ -832,6 +835,7 @@ onMounted(() => {
             </li>
           </ul>
         </template>
+        <p v-else class="tip">{{ recruitLoading ? '抽卡台开张中…' : '帐下尚无将领，抽一签试试手气' }}</p>
       </section>
 
       <!-- ========== 军机要务 ========== -->
@@ -891,6 +895,41 @@ onMounted(() => {
     <Transition name="rc-fade">
       <div v-if="recruitMsg" class="rc-toast">{{ recruitMsg }}</div>
     </Transition>
+
+    <!-- ========== 抽卡结果弹窗 ========== -->
+    <transition name="gacha-fade">
+      <div v-if="gachaModalOpen" class="gacha-modal-mask" @click.self="closeGachaModal">
+        <div class="gacha-modal">
+          <div class="gacha-modal-head">
+            <span class="gacha-modal-title">抽卡结果</span>
+            <span v-if="gachaGained" class="gacha-modal-new">新获 {{ gachaGained }} 员</span>
+            <span v-if="gachaRefund" class="gacha-modal-refund">返还 {{ gachaRefund }} 石</span>
+            <button type="button" class="gacha-modal-close" @click="closeGachaModal">×</button>
+          </div>
+          <div class="gacha-results">
+            <div
+              v-for="(r, i) in gachaResults"
+              :key="i"
+              class="gacha-result"
+              :class="{ 'is-dup': r.duplicate }"
+              :data-f="r.faction"
+              :style="{ '--ri': i }"
+            >
+              <div class="gacha-result-seal">{{ factionName(r.faction).slice(-1) }}</div>
+              <div class="gacha-result-portrait">
+                <span class="hp-fallback" aria-hidden="true">{{ r.name.slice(0, 1) }}</span>
+                <img :src="heroImg(r.name)" :alt="r.name" @error="onHeroImgError" />
+              </div>
+              <div class="gacha-result-name">{{ r.name }}</div>
+              <div class="gacha-result-badge">
+                <span v-if="r.duplicate" class="dup-badge">已有 · 返 {{ r.refund }} 石</span>
+                <span v-else class="new-badge">新入帐</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </transition>
 
     <footer class="footer">凭此印信，出入中军 · 点「退出大帐」可返回登录</footer>
   </div>
@@ -2279,6 +2318,238 @@ onMounted(() => {
 .rc-roster-time {
   font-size: 11px;
   color: var(--text-ghost);
+}
+
+/* ============ 武将图鉴 · 拥有状态 ============ */
+.hero-card.is-owned {
+  border-color: rgba(212, 175, 55, 0.45);
+}
+.hero-card.is-owned .hc-portrait {
+  box-shadow: 0 0 20px -6px var(--accent-glow);
+}
+.hc-portrait.hp-dim {
+  filter: grayscale(0.75) brightness(0.72);
+}
+.hc-owned-badge {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  font-size: 10.5px;
+  letter-spacing: 2px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  color: #3c2a0e;
+  background: linear-gradient(135deg, #f0d9a8, #d4af37);
+  box-shadow: 0 2px 8px -2px rgba(212, 175, 55, 0.6);
+}
+
+/* ============ 招募抽卡 ============ */
+.gacha-panel {
+  display: flex;
+  justify-content: center;
+  gap: 20px;
+  margin: 20px 0 12px;
+}
+.gacha-btn {
+  cursor: pointer;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-width: 150px;
+  padding: 20px 30px;
+  border-radius: 12px;
+  border: 1px solid var(--gold);
+  background: radial-gradient(circle at 50% 0%, rgba(212, 175, 55, 0.18), transparent 70%);
+  color: var(--gold);
+  font-family: var(--font-cal);
+  transition: transform 0.2s, box-shadow 0.2s, background 0.2s;
+}
+.gacha-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 26px -8px var(--accent-glow);
+  background: radial-gradient(circle at 50% 0%, rgba(212, 175, 55, 0.28), transparent 72%);
+}
+.gacha-btn:disabled {
+  cursor: not-allowed;
+  border-color: var(--hair-soft);
+  color: var(--text-ghost);
+  background: transparent;
+}
+.gacha-btn-title {
+  font-size: 20px;
+  letter-spacing: 6px;
+}
+.gacha-btn-cost {
+  font-size: 12px;
+  letter-spacing: 2px;
+  color: var(--text-mute);
+}
+.gacha-ten {
+  border-color: #c9862e;
+  color: #f0c56a;
+  background: radial-gradient(circle at 50% 0%, rgba(201, 134, 46, 0.26), transparent 70%);
+}
+.gacha-ten:hover:not(:disabled) {
+  box-shadow: 0 8px 30px -8px rgba(201, 134, 46, 0.7);
+  background: radial-gradient(circle at 50% 0%, rgba(201, 134, 46, 0.36), transparent 72%);
+}
+.rc-msg {
+  margin: 6px 0 0;
+  text-align: center;
+  font-size: 12px;
+  letter-spacing: 1px;
+  color: #d4af37;
+}
+
+/* 抽卡结果弹窗 */
+.gacha-modal-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(10, 12, 18, 0.72);
+  backdrop-filter: blur(4px);
+}
+.gacha-modal {
+  width: min(680px, 92vw);
+  max-height: 84vh;
+  overflow-y: auto;
+  border: 1px solid var(--gold);
+  border-radius: 14px;
+  background: linear-gradient(180deg, #171a22, #0f1218);
+  padding: 18px 20px 22px;
+  box-shadow: 0 20px 60px -20px rgba(0, 0, 0, 0.8);
+}
+.gacha-modal-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--hair-soft);
+}
+.gacha-modal-title {
+  font-family: var(--font-cal);
+  font-size: 18px;
+  letter-spacing: 4px;
+  color: var(--gold-soft);
+}
+.gacha-modal-new {
+  font-size: 12px;
+  letter-spacing: 1px;
+  color: #4caf7d;
+}
+.gacha-modal-refund {
+  font-size: 12px;
+  letter-spacing: 1px;
+  color: #d4af37;
+}
+.gacha-modal-close {
+  margin-left: auto;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  color: var(--text-mute);
+  font-size: 22px;
+  line-height: 1;
+  padding: 0 4px;
+}
+.gacha-modal-close:hover {
+  color: var(--text);
+}
+.gacha-results {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 12px;
+}
+.gacha-result {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 8px;
+  border: 1px solid var(--hair-soft);
+  border-radius: 10px;
+  background: var(--surface-soft);
+  animation: gacha-pop 0.4s ease both;
+  animation-delay: calc(var(--ri) * 0.06s);
+}
+.gacha-result.is-dup {
+  opacity: 0.66;
+}
+.gacha-result-seal {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--gold);
+  border-radius: 4px;
+  font-size: 11px;
+  color: var(--gold);
+}
+.gacha-result-portrait {
+  width: 88px;
+  height: 62px;
+  border-radius: 6px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.3);
+}
+.gacha-result-portrait img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.gacha-result-portrait .hp-fallback {
+  font-family: var(--font-cal);
+  font-size: 24px;
+  color: rgba(212, 175, 55, 0.4);
+}
+.gacha-result-name {
+  font-family: var(--font-cal);
+  font-size: 14px;
+  letter-spacing: 2px;
+  color: var(--gold-soft);
+}
+.gacha-result-badge {
+  font-size: 10.5px;
+  letter-spacing: 1px;
+}
+.new-badge {
+  color: #4caf7d;
+}
+.dup-badge {
+  color: var(--text-faint);
+}
+
+@keyframes gacha-pop {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+.gacha-fade-enter-active,
+.gacha-fade-leave-active {
+  transition: opacity 0.25s;
+}
+.gacha-fade-enter-from,
+.gacha-fade-leave-to {
+  opacity: 0;
 }
 
 /* 总览里的点将台小卡 */

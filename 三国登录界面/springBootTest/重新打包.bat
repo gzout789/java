@@ -15,14 +15,16 @@ if not errorlevel 1 (
     ping -n 3 127.0.0.1 >nul
 )
 
-set "JAVA_HOME=C:\Program Files\Zulu\zulu-21"
-set "PATH=%JAVA_HOME%\bin;%PATH%"
 
-rem ---- 优先使用 D 盘持久化 Maven，其次 IDEA 内置，最后项目自带 mvnw ----
-set "MVN_CMD=C:\Program Files\JetBrains\IntelliJ IDEA 2026.2.3\plugins\maven-plugin\lib\maven3\bin\mvn.cmd"
-if not exist "%MVN_CMD%" set "MVN_CMD=C:\Program Files\JetBrains\IntelliJ IDEA 2026.2.3\plugins\maven-plugin\lib\maven3\bin\mvn.cmd"
-if not exist "%MVN_CMD%" set "MVN_CMD=%~dp0mvnw.cmd"
-
+set "MVN_CMD="
+where mvn >nul 2>nul && set "MVN_CMD=mvn"
+if not defined MVN_CMD for %%m in ("D:\IntelliJ IDEA 2024.3.2.2\plugins\maven\lib\maven3\bin\mvn.cmd") do if exist "%%~m" set "MVN_CMD=%%~m"
+if not defined MVN_CMD if exist "%~dp0mvnw.cmd" set "MVN_CMD=%~dp0mvnw.cmd"
+if not defined MVN_CMD (
+    echo [错误] 未找到 Maven，请安装 Maven 或使用 IDEA 打开项目打包
+    pause
+    exit /b 1
+)
 echo [打包] 使用 Maven: %MVN_CMD%
 call "%MVN_CMD%" -DskipTests clean package
 if not exist "target\springBootTest-0.0.1-SNAPSHOT.jar" (

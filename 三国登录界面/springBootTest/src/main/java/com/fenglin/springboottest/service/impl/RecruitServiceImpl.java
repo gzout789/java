@@ -2,9 +2,11 @@ package com.fenglin.springboottest.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fenglin.springboottest.dto.RecruitGeneralVO;
+import com.fenglin.springboottest.entity.GachaLog;
 import com.fenglin.springboottest.entity.Hero;
 import com.fenglin.springboottest.entity.Recruit;
 import com.fenglin.springboottest.entity.User;
+import com.fenglin.springboottest.mapper.GachaLogMapper;
 import com.fenglin.springboottest.mapper.HeroMapper;
 import com.fenglin.springboottest.mapper.RecruitMapper;
 import com.fenglin.springboottest.service.RecruitService;
@@ -18,6 +20,7 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -34,16 +37,30 @@ public class RecruitServiceImpl implements RecruitService {
     /** 他阵营加价倍数 */
     private static final double FOREIGN_RATIO = 1.5;
 
+    /** 单抽消耗军饷（石） */
+    private static final int GACHA_SINGLE_COST = 500;
+
+    /** 十连消耗军饷（石），九折 */
+    private static final int GACHA_TEN_COST = 4500;
+
+    /** 抽到重复武将返还招募价的折扣 */
+    private static final double DUP_REFUND_RATIO = 0.5;
+
     private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+
+    private final Random random = new Random();
 
     private final UserService userService;
     private final HeroMapper heroMapper;
     private final RecruitMapper recruitMapper;
+    private final GachaLogMapper gachaLogMapper;
 
-    public RecruitServiceImpl(UserService userService, HeroMapper heroMapper, RecruitMapper recruitMapper) {
+    public RecruitServiceImpl(UserService userService, HeroMapper heroMapper,
+                              RecruitMapper recruitMapper, GachaLogMapper gachaLogMapper) {
         this.userService = userService;
         this.heroMapper = heroMapper;
         this.recruitMapper = recruitMapper;
+        this.gachaLogMapper = gachaLogMapper;
     }
 
     @Override
@@ -82,6 +99,8 @@ public class RecruitServiceImpl implements RecruitService {
         data.put("recruitedCount", mine.size());
         data.put("faction", user.getFaction());
         data.put("generals", generals);
+        data.put("gachaSingleCost", GACHA_SINGLE_COST);
+        data.put("gachaTenCost", GACHA_TEN_COST);
         return data;
     }
 
@@ -131,6 +150,86 @@ public class RecruitServiceImpl implements RecruitService {
         return data;
     }
 
+    @Override
+    public Map<String, Object> gacha(String username, int count) {
+        if (count != 1 && count != 10) {
+            throw new IllegalArgumentException("抽卡次数仅支持单抽或十连");
+        }
+        User user = requireUser(username);
+        int cost = count == 1 ? GACHA_SINGLE_COST : GACHA_TEN_COST;
+        int gold = Math.max(0, INITIAL_GOLD - spentOf(user.getId()));
+        if (gold < cost) {
+            throw new IllegalArgumentException("军饷不足，尚差 " + (cost - gold) + " 石");
+        }
+
+        List<Hero> allHeroes = heroMapper.selectList(
+                new LambdaQueryWrapper<Hero>().orderByAsc(Hero::getSortOrder).orderByAsc(Hero::getId));
+        if (allHeroes.isEmpty()) {
+            throw new IllegalArgumentException("抽卡池空空如也，暂无武将可抽");
+        }
+
+        // 已拥有武将 ID 集合
+        Map<Long, Recruit> mine = recruitMapper.selectList(
+                        new LambdaQueryWrapper<Recruit>().eq(Recruit::getUserId, user.getId()))
+                .stream()
+                .collect(Collectors.toMap(Recruit::getHeroId, Function.identity(), (a, b) -> a));
+
+        List<Map<String, Object>> results = new ArrayList<>();
+        int refund = 0;
+        int gained = 0;
+
+        for (int i = 0; i < count; i++) {
+            Hero hero = allHeroes.get(random.nextInt(allHeroes.size()));
+            boolean dup = mine.containsKey(hero.getId());
+            int singleRefund = 0;
+            if (dup) {
+                // 重复武将：返还招募价的 50%
+                int baseCost = costOf(hero, user.getFaction());
+                singleRefund = (int) (baseCost * DUP_REFUND_RATIO);
+                refund += singleRefund;
+            } else {
+                // 新武将：直接入帐
+                Recruit record = new Recruit();
+                record.setUserId(user.getId());
+                record.setHeroId(hero.getId());
+                record.setCost(0); // 抽卡获得，不记招募价
+                record.setCreateTime(LocalDateTime.now());
+                recruitMapper.insert(record);
+                mine.put(hero.getId(), record);
+                gained++;
+            }
+
+            // 记录抽卡流水（单抽记一条；十连按武将各记一条，成本按次均摊）
+            GachaLog log = new GachaLog();
+            log.setUserId(user.getId());
+            log.setHeroId(hero.getId());
+            log.setCost(cost / count);
+            log.setRefund(singleRefund);
+            log.setCreateTime(LocalDateTime.now());
+            gachaLogMapper.insert(log);
+
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("id", hero.getId());
+            item.put("name", hero.getName());
+            item.put("epithet", hero.getEpithet());
+            item.put("faction", hero.getFaction());
+            item.put("typeName", hero.getTypeName());
+            item.put("power", hero.getPower());
+            item.put("leadership", hero.getLeadership());
+            item.put("duplicate", dup);
+            item.put("refund", singleRefund);
+            results.add(item);
+        }
+
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("cost", cost);
+        data.put("gold", Math.max(0, INITIAL_GOLD - spentOf(user.getId())));
+        data.put("refund", refund);
+        data.put("gained", gained);
+        data.put("results", results);
+        return data;
+    }
+
     private User requireUser(String username) {
         User user = userService.findByUsername(username);
         if (user == null) {
@@ -139,10 +238,19 @@ public class RecruitServiceImpl implements RecruitService {
         return user;
     }
 
+    /** 总净消耗 = 招募花费 + 抽卡净消耗（抽卡消耗 − 重复返还） */
     private int spentOf(Long userId) {
-        List<Recruit> list = recruitMapper.selectList(
-                new LambdaQueryWrapper<Recruit>().eq(Recruit::getUserId, userId));
-        return list.stream().mapToInt(r -> r.getCost() == null ? 0 : r.getCost()).sum();
+        int recruitSpent = recruitMapper.selectList(
+                        new LambdaQueryWrapper<Recruit>().eq(Recruit::getUserId, userId))
+                .stream().mapToInt(r -> r.getCost() == null ? 0 : r.getCost()).sum();
+        int gachaNet = gachaLogMapper.selectList(
+                        new LambdaQueryWrapper<GachaLog>().eq(GachaLog::getUserId, userId))
+                .stream().mapToInt(g -> {
+                    int c = g.getCost() == null ? 0 : g.getCost();
+                    int r = g.getRefund() == null ? 0 : g.getRefund();
+                    return c - r;
+                }).sum();
+        return recruitSpent + gachaNet;
     }
 
     private RecruitGeneralVO toVO(Hero hero, String userFaction) {

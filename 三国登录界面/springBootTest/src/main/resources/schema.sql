@@ -58,6 +58,17 @@ CREATE TABLE IF NOT EXISTS `recruit` (
   KEY `idx_user` (`user_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='点将台招募记录表';
 
+CREATE TABLE IF NOT EXISTS `gacha_log` (
+  `id`          BIGINT   NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `user_id`     BIGINT   NOT NULL                COMMENT '抽卡者（将军账号ID）',
+  `hero_id`     BIGINT   DEFAULT NULL            COMMENT '抽中的武将ID',
+  `cost`        INT      NOT NULL DEFAULT 0      COMMENT '本次消耗军饷（石）',
+  `refund`      INT      NOT NULL DEFAULT 0      COMMENT '重复返还军饷（石）',
+  `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '抽卡时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_gacha_user` (`user_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='抽卡流水表';
+
 -- 后台管理账号（与前台将军账号物理隔离，互不通用）
 CREATE TABLE IF NOT EXISTS `admin_user` (
   `id`          BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键ID',

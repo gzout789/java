@@ -50,14 +50,18 @@ if not errorlevel 1 (
 rem ---- 4. 若无 jar 则自动编译打包 ----
 rem     注意：用 goto 结构，不能把 set 和 %%MVN_CMD%% 放进同一个括号块（延迟展开问题）
 if exist "target\springBootTest-0.0.1-SNAPSHOT.jar" goto runjar
-echo [提示] 未发现 jar 包，先编译打包（约 1-3 分钟）...
-set "MVN_CMD=C:\Program Files\JetBrains\IntelliJ IDEA 2026.2.3\plugins\maven-plugin\lib\maven3\bin\mvn.cmd"
-if not exist "%MVN_CMD%" set "MVN_CMD=C:\Program Files\JetBrains\IntelliJ IDEA 2026.2.3\plugins\maven-plugin\lib\maven3\bin\mvn.cmd"
-if exist "%MVN_CMD%" (
-    call "%MVN_CMD%" -q -DskipTests package
-) else (
-    call mvnw.cmd -q -DskipTests package
+rem ---- 自动探测 Maven（PATH / IDEA 内置 / 项目自带 mvnw）----
+set "MVN_CMD="
+where mvn >nul 2>nul && set "MVN_CMD=mvn"
+if not defined MVN_CMD for %%m in ("D:\IntelliJ IDEA 2024.3.2.2\plugins\maven\lib\maven3\bin\mvn.cmd") do if exist "%%~m" set "MVN_CMD=%%~m"
+if not defined MVN_CMD if exist "%~dp0mvnw.cmd" set "MVN_CMD=%~dp0mvnw.cmd"
+if not defined MVN_CMD (
+    echo [错误] 未找到 Maven，请安装 Maven 或使用 IDEA 打开项目打包
+    pause
+    exit /b 1
 )
+echo [打包] 使用 Maven: %MVN_CMD%
+call "%MVN_CMD%" -q -DskipTests package
 if not exist "target\springBootTest-0.0.1-SNAPSHOT.jar" (
     echo [错误] 打包失败，请查看上方 Maven 日志
     pause
