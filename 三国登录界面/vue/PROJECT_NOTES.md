@@ -2,6 +2,24 @@
 
 > 完整备忘在 `..\springBootTest\PROJECT_NOTES.md`（必读，含本机环境与踩坑记录）。
 
+## 引擎代码结构（2026-11-02 拆分 engine.js）
+
+原 1476 行的 `src/game/engine.js` 已按职责拆分，主文件现在只留「类骨架 + 开局主流程」：
+
+```
+src/game/
+├── engine.js           # Game 类骨架 + prepare/start/loop/nextTurn/runTurn/judgePhase/judgeSwap/discardPhase
+├── engine/
+│   ├── deck.js         # 牌堆 drawRaw/drawCards/dropCard/removeHand
+│   ├── combat.js       # 出牌战斗 useCard/equipCard/resolveSlash/askDodge/resolveSteal/resolveDuel/askNegate 等
+│   ├── damage.js       # 伤害/濒死/阵亡/胜负 damage/dying/death/checkWin
+│   ├── skills.js       # 技能 hasEffect/skillOf/canBeSlash/useSkill/useSecretSkill
+│   └── distance.js     # 距离 + 交互 + 杂项 distance/attackReach/slashTargets/waitHuman/submit/log 等
+```
+
+合并方式：主文件末尾 `Object.assign(Game.prototype, xxxMethods)`，方法调用方式（`this.xxx`）
+与实例状态（`this.state`）**完全不变**，是纯组织性重构。改引擎时按职责定位到对应子模块即可。
+
 ## 快速事实
 
 - 前端：Vue 3 + Vite，端口 5173，`vite.config.js` 中 `/api` 代理到 `http://localhost:8081`
