@@ -148,4 +148,23 @@ src/main/resources/
 **踩坑**：后端 jar 在运行时会被 JVM 锁住，`mvn package` 的 repackage 会报
 `Unable to rename '...jar' to '...jar.original'` —— 先停 8081 进程再打包。
 
-—— 最后更新：2026-10-23（新增后台管理系统）
+## 2026-11-02 新增：登录限流 + 接口文档 + 密码外置
+
+**登录限流**（防暴力破解，内存版）：
+- `security/LoginRateLimiter.java` —— 双维度固定窗口计数：IP 15 分钟 30 次、账号 15 分钟 10 次失败
+- `security/LoginRateLimitInterceptor.java` —— 拦 `/api/login` 与 `/api/admin/login`，超限返回 429
+- `ApiUserController` / `AdminController` 登录失败调 `recordAccountFailure`（超限提示「已暂时锁定」），
+  成功调 `clearAccount`；多实例部署需换 Redis
+- `WebConfig` 里限流拦截器排在鉴权之前
+
+**接口文档**：springdoc-openapi 2.8.6，访问 `http://localhost:8081/swagger-ui.html`；
+`config/OpenApiConfig.java` 配了标题与 Bearer 鉴权说明。
+
+**密码外置**（`application.properties`）：DB/JWT/播种账号密码全改 `${...}` 占位符，
+默认值保留，生产用 `.env` 覆盖；`启动后端.bat` 会自动 `source .env`（若存在）。
+`springBootTest/.env.example` 是模板。
+
+**单元测试**：`src/test` 下 4 个测试类共 29 用例（JwtUtil 8 / ApiUserController 10 /
+LoginRateLimiter 5 / RecruitServiceImpl 6），全绿。跑测试方式见上文「Maven 直调」。
+
+—— 最后更新：2026-11-02（登录限流 + Swagger + 密码外置 + 单测）

@@ -17,10 +17,11 @@
   导航由 `VIEWS` 数组驱动
 - 点将台：`loadRecruit()` 拉 `/api/recruit`，`doRecruit(hero)` 提交 `/api/recruit`；
   军饷、招募价、他阵营加价都由后端算，前端只展示（`gold < cost` 时按钮置灰「军饷不足」）
-- 武将立绘（2026-10-30 改）：与后端 `hero.name` 一一对应，两级资源
+- 武将立绘（2026-10-30 改，2026-11-02 再优化）：与后端 `hero.name` 一一对应，两级资源
   - 列表/牌桌用小图：`public/heroes/opt/<武将名>.webp`（768×512，约 55KB，`useHeroImg.js` 的 `heroImg()`）
-  - 原图：`public/heroes/<武将名>.png`（1536×1024，约 2MB，仅 `heroFullImg()` 用）
-  - **原图不能直接进列表**：26 张共 52MB，会长时间白屏看起来像“武将没有图片”
+  - 原图：`public/heroes/<武将名>.webp`（1536×1024，2026-11-02 起由 PNG 压缩为 webp，约 150-330KB，
+    仅 `heroFullImg()` 用，该函数目前零调用）
+  - **原图不能直接进列表**：以前 26 张共 52MB 会长时间白屏；现已压缩，`public/heroes` 共 6.7MB
   - 缺图不再隐藏整块（`display:none` 会让 3:2 占位框空着），改为图片自身 `visibility:hidden`，
     露出底层水墨姓氏占位（`onHeroImgError`），布局不塌
   - 新增画师没有尺寸工具时：`python -c "from PIL import Image; ..."` 生成 opt 目录（需 `pip install pillow`）
