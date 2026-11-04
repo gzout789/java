@@ -2,6 +2,7 @@
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useTheme, spawnInkRipple, authHeaders } from '../composables/useTheme'
 import { heroImg, onHeroImgError } from '../composables/useHeroImg'
+import HeroDetailModal from './HeroDetailModal.vue'
 
 const props = defineProps({
   user: { type: Object, required: true }
@@ -131,6 +132,15 @@ const heroFaction = ref('all')
 const heroType = ref('all')
 const heroKeyword = ref('')
 const heroOwned = ref('all') // all / owned / unowned
+
+/* 武将详情弹窗：点击卡片查看大图与全部技能 */
+const detailHero = ref(null)
+function openHeroDetail(h) {
+  detailHero.value = h
+}
+function closeHeroDetail() {
+  detailHero.value = null
+}
 
 const factionChips = computed(() => {
   const list =
@@ -750,7 +760,18 @@ onMounted(() => {
         </div>
 
         <div class="hero-grid">
-          <article v-for="(h, i) in filteredHeroes" :key="h.id" class="hero-card" :class="{ 'is-owned': h.owned }" :style="{ '--i': i }">
+          <article
+            v-for="(h, i) in filteredHeroes"
+            :key="h.id"
+            class="hero-card hero-card-click"
+            :class="{ 'is-owned': h.owned }"
+            :style="{ '--i': i }"
+            role="button"
+            tabindex="0"
+            @click="openHeroDetail(h)"
+            @keydown.enter.prevent="openHeroDetail(h)"
+            @keydown.space.prevent="openHeroDetail(h)"
+          >
             <div class="hc-top">
               <span class="hc-seal" :data-f="h.faction">{{ factionName(h.faction).slice(-1) }}</span>
               <div class="hc-name">
@@ -916,6 +937,9 @@ onMounted(() => {
         </div>
       </div>
     </transition>
+
+    <!-- ========== 武将详情弹窗（大图 + 技能） ========== -->
+    <HeroDetailModal :hero="detailHero" @close="closeHeroDetail" />
 
     <footer class="footer">凭此印信，出入中军 · 点「退出大帐」可返回登录</footer>
   </div>
@@ -2222,6 +2246,14 @@ onMounted(() => {
 }
 
 /* ============ 武将图鉴 · 拥有状态 ============ */
+/* 可点击详情卡片 */
+.hero-card-click {
+  cursor: pointer;
+}
+.hero-card-click:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
 .hero-card.is-owned {
   border-color: rgba(212, 175, 55, 0.45);
 }

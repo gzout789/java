@@ -68,9 +68,23 @@ export const distanceMethods = {
     return null
   },
 
+  /**
+   * 等待玩家操作。带 30s 超时兜底，超时自动按「跳过」结算（resolve null），
+   * 绝不让主循环永久挂起导致整局卡死。
+   */
   waitHuman() {
+    // 每次等待分配递增序号（token），resolve 时校验，杜绝嵌套等待间的竞态。
+    const token = (this._waitToken = (this._waitToken || 0) + 1)
     return new Promise((resolve) => {
-      this.humanResolve = resolve
+      const done = (action) => {
+        // 已有更新的等待挂起，本等待作废；或已 resolve 过，幂等保护。
+        if (this._waitToken !== token) return
+        if (this._waitTimer) { clearTimeout(this._waitTimer); this._waitTimer = null }
+        this.humanResolve = null
+        resolve(action)
+      }
+      this.humanResolve = done
+      this._waitTimer = setTimeout(() => done(null), 30000)
     })
   },
 
@@ -81,7 +95,6 @@ export const distanceMethods = {
 
   resolveWait(action) {
     const r = this.humanResolve
-    this.humanResolve = null
     if (r) r(action)
   },
 

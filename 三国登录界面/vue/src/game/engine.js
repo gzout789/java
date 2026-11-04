@@ -36,6 +36,8 @@ export class Game {
     this.speed = opts.speed || 620
     this.humanResolve = null
     this.running = false
+    this._lastProgress = 0 // 看门狗：最近一次回合推进的时间戳
+    this._watchdogTimer = null
 
     this.state = reactive({
       phase: 'select', // select → playing → over
@@ -114,6 +116,7 @@ export class Game {
     this.log('汉主已明置身份，其余诸将暗藏机心。', 'sys')
 
     this.running = true
+    this._startWatchdog()
     this.loop()
   }
 
@@ -127,9 +130,43 @@ export class Game {
         this.nextTurn()
         continue
       }
+      this._lastProgress = Date.now()
       await this.runTurn(seat)
       if (this.state.phase !== 'playing') break
       this.nextTurn()
+    }
+    this._stopWatchdog()
+  }
+
+  /* ==================== 看门狗 ====================
+   * 兜底监测主循环是否卡死：若对局进行中长时间无回合推进，
+   * 先尝试自愈（跳过卡住的玩家等待），仍无改善则打日志告警。
+   * 与 waitHuman 的 30s 超时互为双保险，正常情况下永不触发。
+   */
+  _startWatchdog() {
+    this._lastProgress = Date.now()
+    this._stopWatchdog()
+    this._watchdogTimer = setInterval(() => {
+      if (this.state.phase !== 'playing') return
+      const idle = Date.now() - this._lastProgress
+      // 阈值给到 25s，早于 waitHuman 的 30s 超时，正常情况下 waitHuman 会先自愈。
+      if (idle < 25000) return
+      // 自愈：若仍有挂起的玩家等待，跳过它，避免主循环永久 await。
+      if (this.humanResolve) {
+        this.warn('对局疑似停滞，已自动跳过当前等待以恢复推进。')
+        this.resolveWait(null)
+        this._lastProgress = Date.now()
+      } else {
+        this.warn('对局疑似停滞，请留意战报。')
+        this._lastProgress = Date.now()
+      }
+    }, 5000)
+  }
+
+  _stopWatchdog() {
+    if (this._watchdogTimer) {
+      clearInterval(this._watchdogTimer)
+      this._watchdogTimer = null
     }
   }
 

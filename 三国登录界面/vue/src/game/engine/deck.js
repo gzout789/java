@@ -9,12 +9,14 @@ export const deckMethods = {
     const out = []
     for (let i = 0; i < n; i++) {
       if (!this.state.deck.length) {
-        if (!this.state.discard.length) break
+        if (!this.state.discard.length) break // 两堆皆空，无牌可摸
         this.state.deck = shuffle(this.state.discard)
         this.state.discard = []
         this.log('牌堆已尽，弃牌重洗。', 'sys')
       }
-      out.push(this.state.deck.shift())
+      // 兜底：重洗后仍可能为空（极端情况），绝不 push undefined 脏牌
+      const card = this.state.deck.shift()
+      if (card) out.push(card)
     }
     return out
   },
