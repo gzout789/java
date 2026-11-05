@@ -7,6 +7,7 @@ import com.fenglin.springboottest.entity.Recruit;
 import com.fenglin.springboottest.entity.User;
 import com.fenglin.springboottest.mapper.GachaLogMapper;
 import com.fenglin.springboottest.mapper.HeroMapper;
+import com.fenglin.springboottest.mapper.QuizEarningMapper;
 import com.fenglin.springboottest.mapper.RecruitMapper;
 import com.fenglin.springboottest.service.UserService;
 import org.junit.jupiter.api.BeforeEach;
@@ -32,6 +33,7 @@ class RecruitServiceImplTest {
     private HeroMapper heroMapper;
     private RecruitMapper recruitMapper;
     private GachaLogMapper gachaLogMapper;
+    private QuizEarningMapper quizEarningMapper;
 
     @BeforeEach
     void setUp() {
@@ -39,9 +41,11 @@ class RecruitServiceImplTest {
         heroMapper = mock(HeroMapper.class);
         recruitMapper = mock(RecruitMapper.class);
         gachaLogMapper = mock(GachaLogMapper.class);
-        // 默认无抽卡流水
+        quizEarningMapper = mock(QuizEarningMapper.class);
+        // 默认无抽卡流水、无答题收益
         when(gachaLogMapper.selectList(any(Wrapper.class))).thenReturn(Collections.emptyList());
-        service = new RecruitServiceImpl(userService, heroMapper, recruitMapper, gachaLogMapper);
+        when(quizEarningMapper.selectList(any(Wrapper.class))).thenReturn(Collections.emptyList());
+        service = new RecruitServiceImpl(userService, heroMapper, recruitMapper, gachaLogMapper, quizEarningMapper);
     }
 
     private User user(String name, String faction) {

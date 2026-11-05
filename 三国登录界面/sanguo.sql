@@ -1,17 +1,17 @@
 /*
  Navicat Premium Dump SQL
 
- Source Server         : localhost_3306
+ Source Server         : test
  Source Server Type    : MySQL
- Source Server Version : 80046 (8.0.46)
+ Source Server Version : 80039 (8.0.39)
  Source Host           : localhost:3306
  Source Schema         : sanguo
 
  Target Server Type    : MySQL
- Target Server Version : 80046 (8.0.46)
+ Target Server Version : 80039 (8.0.39)
  File Encoding         : 65001
 
- Date: 04/11/2026 16:59:17
+ Date: 05/11/2026 14:51:38
 */
 
 SET NAMES utf8mb4;
@@ -36,7 +36,7 @@ CREATE TABLE `admin_user`  (
 -- ----------------------------
 -- Records of admin_user
 -- ----------------------------
-INSERT INTO `admin_user` VALUES (1, 'admin', '$2a$10$jLM5E.VmLHKA9g7v8Qpbq.mBEYvzwXv/CoLIre07R9graOQClFgK6', 'admin', '内置管理员', '2026-11-02 09:27:41', '2026-10-23 14:16:19');
+INSERT INTO `admin_user` VALUES (1, 'admin', '$2a$10$jLM5E.VmLHKA9g7v8Qpbq.mBEYvzwXv/CoLIre07R9graOQClFgK6', 'admin', '内置管理员', '2026-11-05 14:50:25', '2026-10-23 14:16:19');
 
 -- ----------------------------
 -- Table structure for gacha_log
@@ -134,6 +134,68 @@ INSERT INTO `news` VALUES (5, '西凉马腾遣使入京，贡良马百匹。', '
 INSERT INTO `news` VALUES (6, '蜀中米价回落三成，百姓争相入市。', '朝野', 6);
 INSERT INTO `news` VALUES (7, '夜观天象，紫微星旁有客星犯位，太史令称主兵事。', '异象', 7);
 INSERT INTO `news` VALUES (8, '汉水暴涨，渡口浮桥被冲断，两岸商旅滞留。', '异象', 8);
+
+-- ----------------------------
+-- Table structure for quiz_earning
+-- ----------------------------
+DROP TABLE IF EXISTS `quiz_earning`;
+CREATE TABLE `quiz_earning`  (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `user_id` bigint NOT NULL COMMENT '答题者（将军账号ID）',
+  `question_id` bigint NOT NULL COMMENT '题目ID',
+  `reward` int NOT NULL DEFAULT 0 COMMENT '本次获得军饷（石）',
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '答题时间',
+  PRIMARY KEY (`id`) USING BTREE,
+  UNIQUE INDEX `uk_user_question`(`user_id` ASC, `question_id` ASC) USING BTREE,
+  INDEX `idx_quiz_user`(`user_id` ASC) USING BTREE
+) ENGINE = InnoDB AUTO_INCREMENT = 1 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '答题军饷收益流水表' ROW_FORMAT = Dynamic;
+
+-- ----------------------------
+-- Records of quiz_earning
+-- ----------------------------
+
+-- ----------------------------
+-- Table structure for quiz_question
+-- ----------------------------
+DROP TABLE IF EXISTS `quiz_question`;
+CREATE TABLE `quiz_question`  (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `question` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL COMMENT '题目正文',
+  `option_a` varchar(120) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NULL DEFAULT NULL COMMENT '选项A',
+  `option_b` varchar(120) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NULL DEFAULT NULL COMMENT '选项B',
+  `option_c` varchar(120) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NULL DEFAULT NULL COMMENT '选项C',
+  `option_d` varchar(120) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NULL DEFAULT NULL COMMENT '选项D',
+  `answer` varchar(2) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL COMMENT '正确答案 A/B/C/D',
+  `explanation` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NULL DEFAULT NULL COMMENT '知识点解析',
+  `reward` int NOT NULL DEFAULT 100 COMMENT '答对奖励军饷（石）',
+  `category` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NULL DEFAULT NULL COMMENT '分类：典故/人物/地理/兵制',
+  `sort_order` int NULL DEFAULT 0 COMMENT '排序',
+  PRIMARY KEY (`id`) USING BTREE
+) ENGINE = InnoDB AUTO_INCREMENT = 21 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '学识问道题库表' ROW_FORMAT = Dynamic;
+
+-- ----------------------------
+-- Records of quiz_question
+-- ----------------------------
+INSERT INTO `quiz_question` VALUES (1, '刘备、关羽、张飞结义的桃园，位于今天的哪一省？', '河北省', '河南省', '山东省', '湖北省', 'A', '桃园结义相传发生在涿郡（今河北省涿州市）。', 100, '典故', 1);
+INSERT INTO `quiz_question` VALUES (2, '「三顾茅庐」中，刘备拜访的是哪位卧龙先生？', '庞统', '诸葛亮', '司马徽', '徐庶', 'B', '刘备三顾茅庐请出诸葛亮，得《隆中对》定三分之策。', 100, '典故', 2);
+INSERT INTO `quiz_question` VALUES (3, '「温酒斩华雄」说的是哪位猛将？', '关羽', '张飞', '赵云', '吕布', 'A', '关羽出战前曹操温酒为敬，斩华雄归来酒尚温。', 100, '人物', 3);
+INSERT INTO `quiz_question` VALUES (4, '赤壁之战中，曹军与孙刘联军对峙的江流是？', '黄河', '汉水', '长江', '淮河', 'C', '赤壁位于今湖北，是长江沿岸的一场水战。', 100, '地理', 4);
+INSERT INTO `quiz_question` VALUES (5, '「草船借箭」的主角，用了几日借得十万支箭？', '一日', '三日', '五日', '七日', 'B', '诸葛亮应周瑜之约，借大雾三日之内草船得箭十万。', 100, '典故', 5);
+INSERT INTO `quiz_question` VALUES (6, '被后世尊为「武圣」，与文圣孔子并称的是？', '岳飞', '关羽', '张飞', '赵云', 'B', '关羽以「义」名垂青史，后世尊为武圣、关帝。', 100, '人物', 6);
+INSERT INTO `quiz_question` VALUES (7, '「隆中对」提出的战略是：先取何处为根据地？', '益州', '荆州', '扬州', '凉州', 'B', '诸葛亮建议先取荆州为家，再图益州，三分天下。', 100, '典故', 7);
+INSERT INTO `quiz_question` VALUES (8, '曹操「挟天子以令诸侯」，所挟的是哪位皇帝？', '汉桓帝', '汉灵帝', '汉献帝', '汉少帝', 'C', '曹操迎汉献帝至许都，自此把持朝政。', 100, '人物', 8);
+INSERT INTO `quiz_question` VALUES (9, '「既生瑜，何生亮」是周瑜临终前的感慨，指的是谁？', '司马懿', '诸葛亮', '庞统', '陆逊', 'B', '周瑜屡为诸葛亮所制，病逝前发出此叹。', 100, '典故', 9);
+INSERT INTO `quiz_question` VALUES (10, '赤壁之战孙刘联军的主帅中，吴军由谁统率？', '鲁肃', '周瑜', '陆逊', '吕蒙', 'B', '周瑜为吴军大都督，黄盖行诈降火攻之策。', 100, '人物', 10);
+INSERT INTO `quiz_question` VALUES (11, '「刮骨疗毒」为关羽医治的神医是？', '张仲景', '华佗', '扁鹊', '皇甫谧', 'B', '关羽臂中毒箭，华佗刮骨疗毒，其谈笑自若。', 100, '典故', 11);
+INSERT INTO `quiz_question` VALUES (12, '「单刀赴会」中，关羽孤身前往会见的是？', '曹操', '孙权', '周瑜', '鲁肃', 'D', '关羽单刀赴会，与鲁肃就荆州之争交锋。', 100, '典故', 12);
+INSERT INTO `quiz_question` VALUES (13, '三国中「赤兔马」先后是吕布与谁的坐骑？', '张飞', '关羽', '赵云', '马超', 'B', '赤兔马先属吕布，后归关羽，关羽败亡后绝食而死。', 100, '人物', 13);
+INSERT INTO `quiz_question` VALUES (14, '「空城计」中，诸葛亮在城头抚琴，吓退了谁的追兵？', '司马懿', '曹真', '司马昭', '张郃', 'A', '传说诸葛亮空城弹琴，司马懿疑有伏兵而退。', 100, '典故', 14);
+INSERT INTO `quiz_question` VALUES (15, '「鞠躬尽瘁，死而后已」出自诸葛亮的哪篇文章？', '《出师表》', '《隆中对》', '《诫子书》', '《后出师表》', 'D', '此句出自《后出师表》，是诸葛亮自明心志之语。', 100, '典故', 15);
+INSERT INTO `quiz_question` VALUES (16, '三国时期蜀汉的都城是今天的哪座城市？', '西安', '成都', '洛阳', '南京', 'B', '刘备在成都称帝，蜀汉以成都为都。', 100, '地理', 16);
+INSERT INTO `quiz_question` VALUES (17, '「生子当如孙仲谋」是谁对孙权（字仲谋）的赞叹？', '刘备', '曹操', '袁绍', '司马懿', 'B', '曹操见孙权军容整肃，叹曰「生子当如孙仲谋」。', 100, '人物', 17);
+INSERT INTO `quiz_question` VALUES (18, '「过五关斩六将」是关羽千里走单骑投奔谁？', '刘备', '曹操', '孙权', '诸葛亮', 'A', '关羽得知刘备下落，过五关斩六将前去相会。', 100, '典故', 18);
+INSERT INTO `quiz_question` VALUES (19, '「白衣渡江」奇袭荆州、擒杀关羽的是哪位东吴将领？', '陆逊', '吕蒙', '周瑜', '鲁肃', 'B', '吕蒙令士卒白衣扮商贾渡江，奇袭荆州。', 100, '人物', 19);
+INSERT INTO `quiz_question` VALUES (20, '魏、蜀、吴三国鼎立的局面，以哪一战役为确立的标志？', '官渡之战', '赤壁之战', '夷陵之战', '汉中之战', 'B', '赤壁之战后曹操无力南下，奠定了三分天下的格局。', 100, '兵制', 20);
 
 -- ----------------------------
 -- Table structure for recruit

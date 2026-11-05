@@ -5,10 +5,19 @@ import com.fenglin.springboottest.common.ApiResult;
 import com.fenglin.springboottest.dto.LoginRequest;
 import com.fenglin.springboottest.entity.AdminUser;
 import com.fenglin.springboottest.entity.Hero;
+import com.fenglin.springboottest.entity.News;
+import com.fenglin.springboottest.entity.QuizQuestion;
 import com.fenglin.springboottest.entity.Recruit;
+import com.fenglin.springboottest.entity.Task;
+import com.fenglin.springboottest.entity.User;
 import com.fenglin.springboottest.mapper.AdminUserMapper;
+import com.fenglin.springboottest.mapper.GachaLogMapper;
 import com.fenglin.springboottest.mapper.HeroMapper;
+import com.fenglin.springboottest.mapper.NewsMapper;
+import com.fenglin.springboottest.mapper.QuizQuestionMapper;
 import com.fenglin.springboottest.mapper.RecruitMapper;
+import com.fenglin.springboottest.mapper.TaskMapper;
+import com.fenglin.springboottest.mapper.UserMapper;
 import com.fenglin.springboottest.security.JwtUtil;
 import com.fenglin.springboottest.security.LoginRateLimiter;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -62,16 +71,28 @@ public class AdminController {
     private final AdminUserMapper adminUserMapper;
     private final HeroMapper heroMapper;
     private final RecruitMapper recruitMapper;
+    private final TaskMapper taskMapper;
+    private final NewsMapper newsMapper;
+    private final QuizQuestionMapper quizQuestionMapper;
+    private final UserMapper userMapper;
+    private final GachaLogMapper gachaLogMapper;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
     private final LoginRateLimiter rateLimiter;
 
     public AdminController(AdminUserMapper adminUserMapper, HeroMapper heroMapper,
-                           RecruitMapper recruitMapper, PasswordEncoder passwordEncoder, JwtUtil jwtUtil,
+                           RecruitMapper recruitMapper, TaskMapper taskMapper, NewsMapper newsMapper,
+                           QuizQuestionMapper quizQuestionMapper, UserMapper userMapper,
+                           GachaLogMapper gachaLogMapper, PasswordEncoder passwordEncoder, JwtUtil jwtUtil,
                            LoginRateLimiter rateLimiter) {
         this.adminUserMapper = adminUserMapper;
         this.heroMapper = heroMapper;
         this.recruitMapper = recruitMapper;
+        this.taskMapper = taskMapper;
+        this.newsMapper = newsMapper;
+        this.quizQuestionMapper = quizQuestionMapper;
+        this.userMapper = userMapper;
+        this.gachaLogMapper = gachaLogMapper;
         this.passwordEncoder = passwordEncoder;
         this.jwtUtil = jwtUtil;
         this.rateLimiter = rateLimiter;
@@ -192,6 +213,14 @@ public class AdminController {
         data.put("avgPower", powerCount == 0 ? 0 : Math.round(powerSum * 10.0 / powerCount) / 10.0);
         data.put("topHero", top == null ? "" : top.getName());
         data.put("skillTypes", SKILL_TYPES);
+        // 内容看板：各模块条目数
+        data.put("taskCount", taskMapper.selectCount(null));
+        data.put("newsCount", newsMapper.selectCount(null));
+        data.put("quizCount", quizQuestionMapper.selectCount(null));
+        // 账号看板
+        data.put("userCount", userMapper.selectCount(null));
+        data.put("recruitCount", recruitMapper.selectCount(null));
+        data.put("gachaCount", gachaLogMapper.selectCount(null));
         return ApiResult.ok(data);
     }
 
@@ -360,5 +389,268 @@ public class AdminController {
         }
         wrapper.orderByAsc(Hero::getSortOrder).orderByAsc(Hero::getId);
         return wrapper;
+    }
+
+    /* ==================== 军机要务管理 ==================== */
+
+    @GetMapping("/tasks")
+    public ApiResult<List<Task>> tasks(@RequestParam(required = false) String keyword) {
+        LambdaQueryWrapper<Task> wrapper = new LambdaQueryWrapper<>();
+        if (StringUtils.hasText(keyword)) {
+            wrapper.like(Task::getTitle, keyword.trim());
+        }
+        wrapper.orderByAsc(Task::getSortOrder).orderByAsc(Task::getId);
+        return ApiResult.ok(taskMapper.selectList(wrapper));
+    }
+
+    @PostMapping("/tasks")
+    public ApiResult<Task> createTask(@RequestBody Task form) {
+        String error = validateTask(form);
+        if (error != null) return ApiResult.fail(error);
+        normalizeTask(form);
+        if (form.getSortOrder() == null) {
+            form.setSortOrder(nextSort(taskMapper.selectCount(null).intValue()));
+        }
+        taskMapper.insert(form);
+        return ApiResult.ok("要务已录入", form);
+    }
+
+    @PutMapping("/tasks/{id}")
+    public ApiResult<Task> updateTask(@PathVariable Long id, @RequestBody Task form) {
+        if (taskMapper.selectById(id) == null) return ApiResult.fail("该要务不存在");
+        String error = validateTask(form);
+        if (error != null) return ApiResult.fail(error);
+        form.setId(id);
+        normalizeTask(form);
+        taskMapper.updateById(form);
+        return ApiResult.ok("要务已更新", taskMapper.selectById(id));
+    }
+
+    @DeleteMapping("/tasks/{id}")
+    public ApiResult<Void> deleteTask(@PathVariable Long id) {
+        if (taskMapper.selectById(id) == null) return ApiResult.fail("该要务不存在");
+        taskMapper.deleteById(id);
+        return ApiResult.ok("要务已移除", null);
+    }
+
+    /* ==================== 烽火快报管理 ==================== */
+
+    @GetMapping("/news")
+    public ApiResult<List<News>> news(@RequestParam(required = false) String keyword) {
+        LambdaQueryWrapper<News> wrapper = new LambdaQueryWrapper<>();
+        if (StringUtils.hasText(keyword)) {
+            wrapper.like(News::getContent, keyword.trim());
+        }
+        wrapper.orderByAsc(News::getSortOrder).orderByAsc(News::getId);
+        return ApiResult.ok(newsMapper.selectList(wrapper));
+    }
+
+    @PostMapping("/news")
+    public ApiResult<News> createNews(@RequestBody News form) {
+        String error = validateNews(form);
+        if (error != null) return ApiResult.fail(error);
+        normalizeNews(form);
+        if (form.getSortOrder() == null) {
+            form.setSortOrder(nextSort(newsMapper.selectCount(null).intValue()));
+        }
+        newsMapper.insert(form);
+        return ApiResult.ok("快报已发布", form);
+    }
+
+    @PutMapping("/news/{id}")
+    public ApiResult<News> updateNews(@PathVariable Long id, @RequestBody News form) {
+        if (newsMapper.selectById(id) == null) return ApiResult.fail("该快报不存在");
+        String error = validateNews(form);
+        if (error != null) return ApiResult.fail(error);
+        form.setId(id);
+        normalizeNews(form);
+        newsMapper.updateById(form);
+        return ApiResult.ok("快报已更新", newsMapper.selectById(id));
+    }
+
+    @DeleteMapping("/news/{id}")
+    public ApiResult<Void> deleteNews(@PathVariable Long id) {
+        if (newsMapper.selectById(id) == null) return ApiResult.fail("该快报不存在");
+        newsMapper.deleteById(id);
+        return ApiResult.ok("快报已移除", null);
+    }
+
+    /* ==================== 学识问道题库管理 ==================== */
+
+    @GetMapping("/quiz")
+    public ApiResult<List<QuizQuestion>> quiz(@RequestParam(required = false) String keyword) {
+        LambdaQueryWrapper<QuizQuestion> wrapper = new LambdaQueryWrapper<>();
+        if (StringUtils.hasText(keyword)) {
+            wrapper.like(QuizQuestion::getQuestion, keyword.trim());
+        }
+        wrapper.orderByAsc(QuizQuestion::getSortOrder).orderByAsc(QuizQuestion::getId);
+        return ApiResult.ok(quizQuestionMapper.selectList(wrapper));
+    }
+
+    @PostMapping("/quiz")
+    public ApiResult<QuizQuestion> createQuiz(@RequestBody QuizQuestion form) {
+        String error = validateQuiz(form);
+        if (error != null) return ApiResult.fail(error);
+        normalizeQuiz(form);
+        if (form.getSortOrder() == null) {
+            form.setSortOrder(nextSort(quizQuestionMapper.selectCount(null).intValue()));
+        }
+        quizQuestionMapper.insert(form);
+        return ApiResult.ok("题目已录入", form);
+    }
+
+    @PutMapping("/quiz/{id}")
+    public ApiResult<QuizQuestion> updateQuiz(@PathVariable Long id, @RequestBody QuizQuestion form) {
+        if (quizQuestionMapper.selectById(id) == null) return ApiResult.fail("该题目不存在");
+        String error = validateQuiz(form);
+        if (error != null) return ApiResult.fail(error);
+        form.setId(id);
+        normalizeQuiz(form);
+        quizQuestionMapper.updateById(form);
+        return ApiResult.ok("题目已更新", quizQuestionMapper.selectById(id));
+    }
+
+    @DeleteMapping("/quiz/{id}")
+    public ApiResult<Void> deleteQuiz(@PathVariable Long id) {
+        if (quizQuestionMapper.selectById(id) == null) return ApiResult.fail("该题目不存在");
+        quizQuestionMapper.deleteById(id);
+        return ApiResult.ok("题目已移除", null);
+    }
+
+    /* ==================== 将军账号管理 ==================== */
+
+    @GetMapping("/users")
+    public ApiResult<List<Map<String, Object>>> users() {
+        List<User> users = userMapper.selectList(
+                new LambdaQueryWrapper<User>().orderByAsc(User::getId));
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (User u : users) {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("id", u.getId());
+            m.put("username", u.getUsername());
+            m.put("faction", u.getFaction());
+            m.put("createTime", u.getCreateTime() == null ? "" : u.getCreateTime().format(TIME_FMT));
+            m.put("recruited", recruitMapper.selectCount(
+                    new LambdaQueryWrapper<Recruit>().eq(Recruit::getUserId, u.getId())));
+            result.add(m);
+        }
+        return ApiResult.ok(result);
+    }
+
+    @PostMapping("/users")
+    public ApiResult<User> createUser(@RequestBody Map<String, Object> body) {
+        String username = body == null ? "" : String.valueOf(body.getOrDefault("username", "")).trim();
+        String password = body == null ? "" : String.valueOf(body.getOrDefault("password", ""));
+        String faction = body == null ? "han" : String.valueOf(body.getOrDefault("faction", "han"));
+
+        if (username.isEmpty()) return ApiResult.fail("将军名号不可为空");
+        if (username.length() > 20) return ApiResult.fail("名号不超过二十字");
+        if (!FACTION_NAMES.containsKey(faction)) return ApiResult.fail("请选择有效阵营");
+        if (password.length() < 6) return ApiResult.fail("虎符密令至少六位");
+        if (userMapper.selectCount(new LambdaQueryWrapper<User>().eq(User::getUsername, username)) > 0) {
+            return ApiResult.fail("此名号已被占用");
+        }
+
+        User user = new User();
+        user.setUsername(username);
+        user.setPassword(passwordEncoder.encode(password));
+        user.setFaction(faction);
+        user.setCreateTime(LocalDateTime.now());
+        user.setUpdateTime(LocalDateTime.now());
+        userMapper.insert(user);
+        user.setPassword(null);
+        return ApiResult.ok("将军「" + username + "」已入册", user);
+    }
+
+    @PutMapping("/users/{id}")
+    public ApiResult<User> updateUser(@PathVariable Long id, @RequestBody Map<String, Object> body) {
+        User exists = userMapper.selectById(id);
+        if (exists == null) return ApiResult.fail("该将军不在册上");
+
+        String username = body == null ? null : String.valueOf(body.getOrDefault("username", exists.getUsername())).trim();
+        String faction = body == null ? exists.getFaction() : String.valueOf(body.getOrDefault("faction", exists.getFaction()));
+        String password = body == null ? "" : String.valueOf(body.getOrDefault("password", ""));
+
+        if (username.isEmpty()) return ApiResult.fail("将军名号不可为空");
+        if (!FACTION_NAMES.containsKey(faction)) return ApiResult.fail("请选择有效阵营");
+        if (!username.equals(exists.getUsername())
+                && userMapper.selectCount(new LambdaQueryWrapper<User>().eq(User::getUsername, username)) > 0) {
+            return ApiResult.fail("此名号已被占用");
+        }
+        if (!password.isEmpty() && password.length() < 6) return ApiResult.fail("虎符密令至少六位");
+
+        User patch = new User();
+        patch.setId(id);
+        patch.setUsername(username);
+        patch.setFaction(faction);
+        if (!password.isEmpty()) {
+            patch.setPassword(passwordEncoder.encode(password));
+        }
+        userMapper.updateById(patch);
+        User updated = userMapper.selectById(id);
+        updated.setPassword(null);
+        return ApiResult.ok("将军「" + username + "」已更新", updated);
+    }
+
+    @DeleteMapping("/users/{id}")
+    public ApiResult<Void> deleteUser(@PathVariable Long id) {
+        if (userMapper.selectById(id) == null) return ApiResult.fail("该将军不在册上");
+        // 清理该账号的招募与抽卡记录，避免残留悬空数据
+        recruitMapper.delete(new LambdaQueryWrapper<Recruit>().eq(Recruit::getUserId, id));
+        userMapper.deleteById(id);
+        return ApiResult.ok("将军已除名", null);
+    }
+
+    /* ==================== 内容校验 ==================== */
+
+    private String validateTask(Task form) {
+        if (form == null || !StringUtils.hasText(form.getTitle())) return "要务内容不可为空";
+        if (form.getTitle().trim().length() > 255) return "要务内容过长";
+        return null;
+    }
+
+    private void normalizeTask(Task form) {
+        form.setTitle(form.getTitle().trim());
+        if (form.getCategory() != null) form.setCategory(form.getCategory().trim());
+    }
+
+    private String validateNews(News form) {
+        if (form == null || !StringUtils.hasText(form.getContent())) return "快报正文不可为空";
+        if (form.getContent().trim().length() > 255) return "快报正文过长";
+        return null;
+    }
+
+    private void normalizeNews(News form) {
+        form.setContent(form.getContent().trim());
+        if (form.getCategory() != null) form.setCategory(form.getCategory().trim());
+    }
+
+    private String validateQuiz(QuizQuestion form) {
+        if (form == null || !StringUtils.hasText(form.getQuestion())) return "题目不可为空";
+        if (form.getQuestion().trim().length() > 255) return "题目过长";
+        for (String opt : new String[]{form.getOptionA(), form.getOptionB(), form.getOptionC(), form.getOptionD()}) {
+            if (!StringUtils.hasText(opt)) return "四个选项皆不可为空";
+        }
+        if (!StringUtils.hasText(form.getAnswer()) || !form.getAnswer().trim().toUpperCase().matches("[ABCD]")) {
+            return "正确答案须为 A/B/C/D";
+        }
+        if (form.getReward() != null && form.getReward() < 0) return "奖励军饷不可为负";
+        return null;
+    }
+
+    private void normalizeQuiz(QuizQuestion form) {
+        form.setQuestion(form.getQuestion().trim());
+        form.setOptionA(form.getOptionA().trim());
+        form.setOptionB(form.getOptionB().trim());
+        form.setOptionC(form.getOptionC().trim());
+        form.setOptionD(form.getOptionD().trim());
+        form.setAnswer(form.getAnswer().trim().toUpperCase());
+        if (form.getExplanation() != null) form.setExplanation(form.getExplanation().trim());
+        if (form.getCategory() != null) form.setCategory(form.getCategory().trim());
+    }
+
+    /** 下一排序号：现有最大 sort_order + 1 */
+    private int nextSort(int count) {
+        return count + 1;
     }
 }

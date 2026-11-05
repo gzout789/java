@@ -33,6 +33,58 @@ public class SchemaMigrator implements ApplicationRunner {
         addColumn("hero", "skill_name", "VARCHAR(30) DEFAULT NULL COMMENT '武将技名称'");
         addColumn("hero", "skill_type", "VARCHAR(10) DEFAULT NULL COMMENT '武将技类型：常策/奇谋/应策/秘计'");
         addColumn("hero", "skill_desc", "VARCHAR(120) DEFAULT NULL COMMENT '武将技描述'");
+        createQuizTables();
+    }
+
+    /** 学识问道所需两张表：题库 + 答题收益流水 */
+    private void createQuizTables() {
+        try {
+            Integer q = jdbc.queryForObject(
+                    "SELECT COUNT(*) FROM information_schema.TABLES "
+                            + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'quiz_question'",
+                    Integer.class);
+            if (q == null || q == 0) {
+                jdbc.execute("CREATE TABLE `quiz_question` ("
+                        + "`id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',"
+                        + "`question` varchar(255) NOT NULL COMMENT '题目正文',"
+                        + "`option_a` varchar(120) DEFAULT NULL COMMENT '选项A',"
+                        + "`option_b` varchar(120) DEFAULT NULL COMMENT '选项B',"
+                        + "`option_c` varchar(120) DEFAULT NULL COMMENT '选项C',"
+                        + "`option_d` varchar(120) DEFAULT NULL COMMENT '选项D',"
+                        + "`answer` varchar(2) NOT NULL COMMENT '正确答案 A/B/C/D',"
+                        + "`explanation` varchar(255) DEFAULT NULL COMMENT '知识点解析',"
+                        + "`reward` int NOT NULL DEFAULT 100 COMMENT '答对奖励军饷（石）',"
+                        + "`category` varchar(20) DEFAULT NULL COMMENT '分类：典故/人物/地理/兵制',"
+                        + "`sort_order` int DEFAULT 0 COMMENT '排序',"
+                        + "PRIMARY KEY (`id`) USING BTREE"
+                        + ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='学识问道题库表'");
+                log.info("已创建表 quiz_question");
+            }
+        } catch (Exception e) {
+            log.warn("创建表 quiz_question 失败：{}", e.getMessage());
+        }
+
+        try {
+            Integer e = jdbc.queryForObject(
+                    "SELECT COUNT(*) FROM information_schema.TABLES "
+                            + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'quiz_earning'",
+                    Integer.class);
+            if (e == null || e == 0) {
+                jdbc.execute("CREATE TABLE `quiz_earning` ("
+                        + "`id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',"
+                        + "`user_id` bigint NOT NULL COMMENT '答题者（将军账号ID）',"
+                        + "`question_id` bigint NOT NULL COMMENT '题目ID',"
+                        + "`reward` int NOT NULL DEFAULT 0 COMMENT '本次获得军饷（石）',"
+                        + "`create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '答题时间',"
+                        + "PRIMARY KEY (`id`) USING BTREE,"
+                        + "UNIQUE INDEX `uk_user_question`(`user_id` ASC, `question_id` ASC) USING BTREE,"
+                        + "INDEX `idx_quiz_user`(`user_id` ASC) USING BTREE"
+                        + ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='答题军饷收益流水表'");
+                log.info("已创建表 quiz_earning");
+            }
+        } catch (Exception e) {
+            log.warn("创建表 quiz_earning 失败：{}", e.getMessage());
+        }
     }
 
     /** 列不存在才 ALTER，已存在直接跳过 */

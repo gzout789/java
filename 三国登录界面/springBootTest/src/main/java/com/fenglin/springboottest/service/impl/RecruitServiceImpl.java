@@ -4,10 +4,12 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fenglin.springboottest.dto.RecruitGeneralVO;
 import com.fenglin.springboottest.entity.GachaLog;
 import com.fenglin.springboottest.entity.Hero;
+import com.fenglin.springboottest.entity.QuizEarning;
 import com.fenglin.springboottest.entity.Recruit;
 import com.fenglin.springboottest.entity.User;
 import com.fenglin.springboottest.mapper.GachaLogMapper;
 import com.fenglin.springboottest.mapper.HeroMapper;
+import com.fenglin.springboottest.mapper.QuizEarningMapper;
 import com.fenglin.springboottest.mapper.RecruitMapper;
 import com.fenglin.springboottest.service.RecruitService;
 import com.fenglin.springboottest.service.UserService;
@@ -54,20 +56,24 @@ public class RecruitServiceImpl implements RecruitService {
     private final HeroMapper heroMapper;
     private final RecruitMapper recruitMapper;
     private final GachaLogMapper gachaLogMapper;
+    private final QuizEarningMapper quizEarningMapper;
 
     public RecruitServiceImpl(UserService userService, HeroMapper heroMapper,
-                              RecruitMapper recruitMapper, GachaLogMapper gachaLogMapper) {
+                              RecruitMapper recruitMapper, GachaLogMapper gachaLogMapper,
+                              QuizEarningMapper quizEarningMapper) {
         this.userService = userService;
         this.heroMapper = heroMapper;
         this.recruitMapper = recruitMapper;
         this.gachaLogMapper = gachaLogMapper;
+        this.quizEarningMapper = quizEarningMapper;
     }
 
     @Override
     public Map<String, Object> board(String username) {
         User user = requireUser(username);
         int spent = spentOf(user.getId());
-        int gold = Math.max(0, INITIAL_GOLD - spent);
+        int earned = earnedOf(user.getId());
+        int gold = Math.max(0, INITIAL_GOLD - spent + earned);
 
         Map<Long, Recruit> mine = recruitMapper.selectList(
                         new LambdaQueryWrapper<Recruit>().eq(Recruit::getUserId, user.getId()))
@@ -96,6 +102,7 @@ public class RecruitServiceImpl implements RecruitService {
         data.put("initialGold", INITIAL_GOLD);
         data.put("gold", gold);
         data.put("spent", spent);
+        data.put("earned", earned);
         data.put("recruitedCount", mine.size());
         data.put("faction", user.getFaction());
         data.put("generals", generals);
@@ -124,7 +131,7 @@ public class RecruitServiceImpl implements RecruitService {
         }
 
         int cost = costOf(hero, user.getFaction());
-        int gold = Math.max(0, INITIAL_GOLD - spentOf(user.getId()));
+        int gold = Math.max(0, INITIAL_GOLD - spentOf(user.getId()) + earnedOf(user.getId()));
         if (gold < cost) {
             throw new IllegalArgumentException("军饷不足，尚差 " + (cost - gold) + " 石");
         }
@@ -157,7 +164,7 @@ public class RecruitServiceImpl implements RecruitService {
         }
         User user = requireUser(username);
         int cost = count == 1 ? GACHA_SINGLE_COST : GACHA_TEN_COST;
-        int gold = Math.max(0, INITIAL_GOLD - spentOf(user.getId()));
+        int gold = Math.max(0, INITIAL_GOLD - spentOf(user.getId()) + earnedOf(user.getId()));
         if (gold < cost) {
             throw new IllegalArgumentException("军饷不足，尚差 " + (cost - gold) + " 石");
         }
@@ -237,7 +244,7 @@ public class RecruitServiceImpl implements RecruitService {
 
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("cost", cost);
-        data.put("gold", Math.max(0, INITIAL_GOLD - spentOf(user.getId())));
+        data.put("gold", Math.max(0, INITIAL_GOLD - spentOf(user.getId()) + earnedOf(user.getId())));
         data.put("refund", refund);
         data.put("gained", gained);
         data.put("results", results);
@@ -265,6 +272,13 @@ public class RecruitServiceImpl implements RecruitService {
                     return c - r;
                 }).sum();
         return recruitSpent + gachaNet;
+    }
+
+    /** 学识问道累计收益（答题所得军饷，只增不减） */
+    private int earnedOf(Long userId) {
+        return quizEarningMapper.selectList(
+                        new LambdaQueryWrapper<QuizEarning>().eq(QuizEarning::getUserId, userId))
+                .stream().mapToInt(e -> e.getReward() == null ? 0 : e.getReward()).sum();
     }
 
     private RecruitGeneralVO toVO(Hero hero, String userFaction) {

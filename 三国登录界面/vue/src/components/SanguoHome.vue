@@ -45,6 +45,7 @@ const VIEWS = [
   { key: 'overview', label: '总览' },
   { key: 'heroes', label: '武将图鉴' },
   { key: 'recruit', label: '招募抽卡' },
+  { key: 'study', label: '学识问道' },
   { key: 'tasks', label: '军机要务' },
   { key: 'news', label: '烽火快报' }
 ]
@@ -425,6 +426,103 @@ function closeGachaModal() {
   gachaResults.value = []
 }
 
+/* ---------------- 学识问道（学习三国史 + 答题得军饷） ---------------- */
+const quiz = ref(null)
+const quizLoading = ref(false)
+const quizAnsweringId = ref(null) // 正在提交的题目 id
+const quizFeedback = ref(null) // { questionId, correct, reward, explanation }
+
+// 学习卡片（三国历史知识小贴士，非题目，纯阅读）
+const studyCards = [
+  {
+    title: '桃园结义',
+    tag: '典故',
+    text: '刘备、关羽、张飞于涿郡桃园结为异姓兄弟，誓言「同生共死」，成就千古义气典范。',
+  },
+  {
+    title: '官渡之战',
+    tag: '兵制',
+    text: '曹操以少胜多，火烧乌巢粮草，大破袁绍，奠定统一北方的基础，是三大以少胜多之战其一。',
+  },
+  {
+    title: '隆中对',
+    tag: '典故',
+    text: '诸葛亮未出茅庐，为刘备陈说「先取荆州、再图益州、外结孙权、内修政理」的三分天下之策。',
+  },
+  {
+    title: '赤壁之战',
+    tag: '兵制',
+    text: '孙刘联军以火攻大破曹军八十万，周瑜黄盖行诈降之计，自此奠定三国鼎立格局。',
+  }
+]
+
+async function loadQuiz() {
+  quizLoading.value = true
+  try {
+    const data = await requestJson('/api/quiz/board')
+    if (data && data.success) quiz.value = data.data
+  } catch {
+    /* 静默失败 */
+  } finally {
+    quizLoading.value = false
+  }
+}
+
+const quizQuestions = computed(() => (quiz.value && quiz.value.questions) || [])
+const quizAnswered = computed(() => (quiz.value ? quiz.value.answeredCount : 0))
+const quizEarned = computed(() => (quiz.value ? quiz.value.earned : 0))
+
+/** 提交答案：答对发军饷，回显对错与解析 */
+async function submitAnswer(q) {
+  if (quizAnsweringId.value || !pickedOf(q)) return
+  quizAnsweringId.value = q.id
+  try {
+    const res = await fetch('/api/quiz/answer', {
+      method: 'POST',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ questionId: q.id, choice: pickedOf(q) })
+    })
+    if (res.status === 401) {
+      handleUnauthorized()
+      return
+    }
+    const data = await res.json()
+    if (data.success) {
+      quizFeedback.value = data.data
+      // 刷新题库状态与军饷
+      await loadQuiz()
+      await loadRecruit()
+    } else {
+      flashRecruitMsg(data.message || '答题未成')
+    }
+  } catch {
+    flashRecruitMsg('与军中失联，答题未成')
+  } finally {
+    quizAnsweringId.value = null
+  }
+}
+
+/** 取某题当前选中的选项字母 */
+function pickedOf(q) {
+  return q && q.picked ? q.picked : ''
+}
+
+function chooseOption(q, key) {
+  if (q.answered) return
+  q.picked = key
+}
+
+/** 提交后把选项回填为「对/错」高亮 */
+function optionClass(q, key) {
+  const fb = quizFeedback.value
+  const isThis = fb && fb.questionId === q.id
+  if (!isThis) return { chosen: q.picked === key }
+  return {
+    correct: key === fb.answer,
+    wrong: q.picked === key && key !== fb.answer
+  }
+}
+
 /* ---------------- 退出 ---------------- */
 function handleLogout() {
   emit('logout')
@@ -437,6 +535,7 @@ onMounted(() => {
   loadTasks()
   loadNews()
   loadRecruit()
+  loadQuiz()
 })
 </script>
 
@@ -703,6 +802,37 @@ onMounted(() => {
               <li v-if="!recruitedGenerals.length" class="rc-ov-empty">帐下尚虚，速去招募抽卡招贤</li>
             </ul>
           </section>
+
+          <section class="card study-entry" style="--i: 6">
+            <h2 class="card-title more" @click="goView('study')">
+              学识问道
+              <span class="more-link">前往研读 →</span>
+            </h2>
+            <p class="study-entry-tip">
+              读史明智，答题生财。答对三国史题，赏军饷充实中军。
+            </p>
+            <div class="study-entry-stats">
+              <div class="study-entry-stat">
+                <span class="study-entry-num">{{ quizAnswered }}</span>
+                <span class="study-entry-label">已答题</span>
+              </div>
+              <div class="study-entry-stat">
+                <span class="study-entry-num">+{{ quizEarned }}</span>
+                <span class="study-entry-label">累计得军饷</span>
+              </div>
+              <div class="study-entry-stat">
+                <span class="study-entry-num">{{ quizQuestions.length }}</span>
+                <span class="study-entry-label">题库总题</span>
+              </div>
+            </div>
+            <button
+              type="button"
+              class="study-entry-btn ink-ripple-host"
+              @click="goView('study'); ripple($event)"
+            >
+              研读史册，答题赚军饷
+            </button>
+          </section>
         </div>
       </template>
 
@@ -840,6 +970,104 @@ onMounted(() => {
         </div>
 
         <p v-if="recruitMsg" class="rc-msg">{{ recruitMsg }}</p>
+      </section>
+
+      <!-- ========== 学识问道 ========== -->
+      <section v-else-if="activeView === 'study'" class="card board study">
+        <div class="board-head">
+          <h2 class="card-title nomargin">学识问道</h2>
+          <div class="gold-box">
+            <span class="gold-label">军饷</span>
+            <span class="gold-num">{{ recruit ? recruit.gold : '—' }}</span>
+            <span class="gold-unit">石</span>
+            <span v-if="recruit && recruit.earned" class="gold-used">学识已补 +{{ recruit.earned }} 石</span>
+          </div>
+        </div>
+
+        <!-- 学习卡片：读史明志 -->
+        <div class="study-head">
+          <h3 class="study-sub-title">📖 研读史册</h3>
+          <p class="study-sub-hint">静心读史，明理修身。读懂下方典故，答题自然如鱼得水。</p>
+        </div>
+        <div class="study-cards">
+          <article v-for="(c, i) in studyCards" :key="c.title" class="study-card" :style="{ '--i': i }">
+            <div class="study-card-head">
+              <span class="study-card-title">{{ c.title }}</span>
+              <span class="study-card-tag">{{ c.tag }}</span>
+            </div>
+            <p class="study-card-text">{{ c.text }}</p>
+          </article>
+        </div>
+
+        <!-- 答题得军饷 -->
+        <div class="study-head">
+          <h3 class="study-sub-title">✒️ 考校学识</h3>
+          <p class="study-sub-hint">
+            每题答对赏 <b>100 石</b>，已答 <b>{{ quizAnswered }}</b> 题、累计得军饷
+            <b>+{{ quizEarned }}</b> 石；同题不可重复得赏。
+          </p>
+        </div>
+
+        <p v-if="quizLoading" class="tip">书卷翻动中…</p>
+        <p v-else-if="!quizQuestions.length" class="tip">题库暂空，容军师稍后再备题</p>
+
+        <div v-else class="quiz-list">
+          <article
+            v-for="(q, qi) in quizQuestions"
+            :key="q.id"
+            class="quiz-item"
+            :class="{ done: q.answered, feedback: quizFeedback && quizFeedback.questionId === q.id }"
+          >
+            <div class="quiz-q">
+              <span class="quiz-q-no">{{ qi + 1 }}</span>
+              <span class="quiz-q-text">{{ q.question }}</span>
+              <span v-if="q.category" class="quiz-q-cat">{{ q.category }}</span>
+            </div>
+
+            <div class="quiz-opts">
+              <button
+                v-for="opt in [{ k: 'A', v: q.optionA }, { k: 'B', v: q.optionB }, { k: 'C', v: q.optionC }, { k: 'D', v: q.optionD }]"
+                :key="opt.k"
+                type="button"
+                class="quiz-opt ink-ripple-host"
+                :class="optionClass(q, opt.k)"
+                :disabled="q.answered"
+                @click="chooseOption(q, opt.k); ripple($event)"
+              >
+                <span class="quiz-opt-key">{{ opt.k }}</span>
+                <span class="quiz-opt-val">{{ opt.v }}</span>
+              </button>
+            </div>
+
+            <!-- 反馈：答对/答错 + 解析 -->
+            <div v-if="quizFeedback && quizFeedback.questionId === q.id" class="quiz-feedback">
+              <div class="quiz-feedback-result" :class="{ ok: quizFeedback.correct }">
+                {{ quizFeedback.correct ? '✔ 答对' : '✘ 有误' }}
+                <template v-if="quizFeedback.reward"> · 赏军饷 +{{ quizFeedback.reward }} 石</template>
+              </div>
+              <p class="quiz-feedback-explain">
+                <b>正解 {{ quizFeedback.answer }}</b>：
+                {{ quizFeedback.explanation }}
+              </p>
+            </div>
+
+            <div v-if="q.answered && !(quizFeedback && quizFeedback.questionId === q.id)" class="quiz-done">
+              此题已答，赏银已入中军。
+            </div>
+
+            <div class="quiz-actions">
+              <button
+                v-if="!q.answered"
+                type="button"
+                class="quiz-submit ink-ripple-host"
+                :disabled="quizAnsweringId === q.id || !pickedOf(q)"
+                @click="submitAnswer(q); ripple($event)"
+              >
+                {{ quizAnsweringId === q.id ? '批阅中…' : '呈交答卷' }}
+              </button>
+            </div>
+          </article>
+        </div>
       </section>
 
       <!-- ========== 军机要务 ========== -->
@@ -2602,5 +2830,316 @@ onMounted(() => {
 .rc-fade-leave-to {
   opacity: 0;
   transform: translate(-50%, 8px);
+}
+
+/* ============ 学识问道 ============ */
+
+/* 总览入口卡 */
+.study-entry {
+  background: radial-gradient(circle at 50% 0%, rgba(212, 175, 55, 0.12), transparent 70%);
+}
+.study-entry-tip {
+  margin: 6px 0 12px;
+  font-size: 12.5px;
+  line-height: 1.8;
+  color: var(--text-mute);
+}
+.study-entry-stats {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.study-entry-stat {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 10px 6px;
+  border: 1px solid var(--hair-soft);
+  border-radius: 8px;
+  background: var(--surface-soft);
+}
+.study-entry-num {
+  font-family: var(--font-cal);
+  font-size: 22px;
+  color: var(--gold-soft);
+}
+.study-entry-label {
+  margin-top: 2px;
+  font-size: 10.5px;
+  letter-spacing: 1px;
+  color: var(--text-faint);
+}
+.study-entry-btn {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid var(--gold);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--gold-soft);
+  font-size: 13px;
+  letter-spacing: 3px;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+}
+.study-entry-btn:hover {
+  background: var(--gold);
+  color: #0e1118;
+}
+
+/* 学识问道主视图 */
+.study-head {
+  margin: 18px 0 10px;
+}
+.study-head:first-of-type {
+  margin-top: 4px;
+}
+.study-sub-title {
+  margin: 0;
+  font-family: var(--font-cal);
+  font-size: 16px;
+  letter-spacing: 3px;
+  color: var(--gold-soft);
+}
+.study-sub-hint {
+  margin: 4px 0 0;
+  font-size: 12px;
+  line-height: 1.8;
+  color: var(--text-mute);
+}
+.study-sub-hint b {
+  color: var(--gold-soft);
+}
+
+/* 学习卡片 */
+.study-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 12px;
+}
+.study-card {
+  border: 1px solid var(--hair-soft);
+  border-radius: 9px;
+  padding: 12px 14px;
+  background: var(--surface-soft);
+  transition: transform 0.2s, border-color 0.2s;
+}
+.study-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--gold);
+}
+.study-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.study-card-title {
+  font-family: var(--font-cal);
+  font-size: 15px;
+  letter-spacing: 2px;
+  color: var(--text);
+}
+.study-card-tag {
+  font-size: 10px;
+  letter-spacing: 1px;
+  color: var(--gold-soft);
+  border: 1px solid var(--gold);
+  border-radius: 3px;
+  padding: 1px 6px;
+  opacity: 0.9;
+}
+.study-card-text {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.9;
+  color: var(--text-mute);
+}
+
+/* 答题列表 */
+.quiz-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.quiz-item {
+  border: 1px solid var(--hair-soft);
+  border-radius: 10px;
+  padding: 14px 16px;
+  background: var(--surface-soft);
+  transition: border-color 0.2s;
+}
+.quiz-item.feedback {
+  border-color: var(--gold);
+}
+.quiz-item.done {
+  opacity: 0.82;
+}
+.quiz-q {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.quiz-q-no {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--gold);
+  border-radius: 50%;
+  font-family: var(--font-cal);
+  font-size: 12px;
+  color: var(--gold-soft);
+}
+.quiz-q-text {
+  flex: 1;
+  font-size: 14.5px;
+  line-height: 1.6;
+  color: var(--text);
+}
+.quiz-q-cat {
+  flex: 0 0 auto;
+  font-size: 10px;
+  letter-spacing: 1px;
+  color: var(--text-faint);
+  border: 1px solid var(--hair-soft);
+  border-radius: 3px;
+  padding: 1px 6px;
+}
+
+.quiz-opts {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+.quiz-opt {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+  padding: 9px 12px;
+  border: 1px solid var(--hair-soft);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.quiz-opt:hover:not(:disabled) {
+  border-color: var(--gold);
+  background: var(--surface-2);
+}
+.quiz-opt:disabled {
+  cursor: default;
+}
+.quiz-opt-key {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--hair);
+  border-radius: 4px;
+  font-size: 11px;
+  color: var(--gold-soft);
+}
+.quiz-opt-val {
+  font-size: 13px;
+  line-height: 1.5;
+}
+.quiz-opt.chosen {
+  border-color: var(--gold);
+  background: var(--surface-2);
+}
+.quiz-opt.correct {
+  border-color: #3aa66a;
+  background: rgba(58, 166, 106, 0.14);
+}
+.quiz-opt.correct .quiz-opt-key {
+  border-color: #3aa66a;
+  color: #5fd58d;
+}
+.quiz-opt.wrong {
+  border-color: #d95f5f;
+  background: rgba(217, 95, 95, 0.14);
+}
+.quiz-opt.wrong .quiz-opt-key {
+  border-color: #d95f5f;
+  color: #ef8a8a;
+}
+
+.quiz-actions {
+  margin-top: 12px;
+  display: flex;
+  justify-content: flex-end;
+}
+.quiz-submit {
+  padding: 8px 22px;
+  border: 1px solid var(--gold);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--gold-soft);
+  font-size: 13px;
+  letter-spacing: 3px;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+}
+.quiz-submit:hover:not(:disabled) {
+  background: var(--gold);
+  color: #0e1118;
+}
+.quiz-submit:disabled {
+  cursor: not-allowed;
+  border-color: var(--hair-soft);
+  color: var(--text-ghost);
+}
+
+.quiz-feedback {
+  margin-top: 12px;
+  border: 1px solid var(--hair-soft);
+  border-left: 3px solid var(--gold);
+  border-radius: 7px;
+  padding: 10px 12px;
+  background: var(--surface-2);
+}
+.quiz-feedback-result {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: #ef8a8a;
+}
+.quiz-feedback-result.ok {
+  color: #5fd58d;
+}
+.quiz-feedback-explain {
+  margin: 6px 0 0;
+  font-size: 12.5px;
+  line-height: 1.8;
+  color: var(--text-mute);
+}
+.quiz-feedback-explain b {
+  color: var(--gold-soft);
+}
+
+.quiz-done {
+  margin-top: 12px;
+  font-size: 12px;
+  letter-spacing: 1px;
+  color: var(--text-faint);
+}
+
+@media (max-width: 560px) {
+  .quiz-opts {
+    grid-template-columns: 1fr;
+  }
+  .study-entry-stats {
+    flex-direction: column;
+    gap: 8px;
+  }
 }
 </style>

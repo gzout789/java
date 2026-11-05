@@ -3,11 +3,13 @@ package com.fenglin.springboottest.config;
 import com.fenglin.springboottest.entity.AdminUser;
 import com.fenglin.springboottest.entity.Hero;
 import com.fenglin.springboottest.entity.News;
+import com.fenglin.springboottest.entity.QuizQuestion;
 import com.fenglin.springboottest.entity.Task;
 import com.fenglin.springboottest.entity.User;
 import com.fenglin.springboottest.mapper.AdminUserMapper;
 import com.fenglin.springboottest.mapper.HeroMapper;
 import com.fenglin.springboottest.mapper.NewsMapper;
+import com.fenglin.springboottest.mapper.QuizQuestionMapper;
 import com.fenglin.springboottest.mapper.TaskMapper;
 import com.fenglin.springboottest.mapper.UserMapper;
 import org.slf4j.Logger;
@@ -39,6 +41,7 @@ public class DemoDataSeeder implements ApplicationRunner {
     private final HeroMapper heroMapper;
     private final TaskMapper taskMapper;
     private final NewsMapper newsMapper;
+    private final QuizQuestionMapper quizQuestionMapper;
     private final PasswordEncoder passwordEncoder;
 
     /** 后台管理账号（首次建库播种，之后改密码不会被覆盖），来自环境变量，默认 admin */
@@ -54,12 +57,14 @@ public class DemoDataSeeder implements ApplicationRunner {
     private String demoPassword;
 
     public DemoDataSeeder(UserMapper userMapper, AdminUserMapper adminUserMapper, HeroMapper heroMapper,
-                          TaskMapper taskMapper, NewsMapper newsMapper, PasswordEncoder passwordEncoder) {
+                          TaskMapper taskMapper, NewsMapper newsMapper,
+                          QuizQuestionMapper quizQuestionMapper, PasswordEncoder passwordEncoder) {
         this.userMapper = userMapper;
         this.adminUserMapper = adminUserMapper;
         this.heroMapper = heroMapper;
         this.taskMapper = taskMapper;
         this.newsMapper = newsMapper;
+        this.quizQuestionMapper = quizQuestionMapper;
         this.passwordEncoder = passwordEncoder;
     }
 
@@ -71,6 +76,7 @@ public class DemoDataSeeder implements ApplicationRunner {
         enrichHeroSkills();
         seedTasks();
         seedNews();
+        seedQuizQuestions();
     }
 
     /**
@@ -334,5 +340,54 @@ public class DemoDataSeeder implements ApplicationRunner {
             newsMapper.insert(news);
         }
         log.info("已播种烽火快报 {} 则", data.length);
+    }
+
+    /**
+     * 学识问道题库：三国历史知识（人物/典故/地理/兵制）。
+     * 每题四个选项，答对奖励军饷，解析用于寓教于乐。
+     */
+    private void seedQuizQuestions() {
+        if (quizQuestionMapper.selectCount(null) > 0) {
+            return;
+        }
+        // 题目, A, B, C, D, 答案, 解析, 奖励, 分类
+        String[][] data = {
+                {"刘备、关羽、张飞结义的桃园，位于今天的哪一省？", "河北省", "河南省", "山东省", "湖北省", "A", "桃园结义相传发生在涿郡（今河北省涿州市）。", "100", "典故"},
+                {"「三顾茅庐」中，刘备拜访的是哪位卧龙先生？", "庞统", "诸葛亮", "司马徽", "徐庶", "B", "刘备三顾茅庐请出诸葛亮，得《隆中对》定三分之策。", "100", "典故"},
+                {"「温酒斩华雄」说的是哪位猛将？", "关羽", "张飞", "赵云", "吕布", "A", "关羽出战前曹操温酒为敬，斩华雄归来酒尚温。", "100", "人物"},
+                {"赤壁之战中，曹军与孙刘联军对峙的江流是？", "黄河", "汉水", "长江", "淮河", "C", "赤壁位于今湖北，是长江沿岸的一场水战。", "100", "地理"},
+                {"「草船借箭」的主角，用了几日借得十万支箭？", "一日", "三日", "五日", "七日", "B", "诸葛亮应周瑜之约，借大雾三日之内草船得箭十万。", "100", "典故"},
+                {"被后世尊为「武圣」，与文圣孔子并称的是？", "岳飞", "关羽", "张飞", "赵云", "B", "关羽以「义」名垂青史，后世尊为武圣、关帝。", "100", "人物"},
+                {"「隆中对」提出的战略是：先取何处为根据地？", "益州", "荆州", "扬州", "凉州", "B", "诸葛亮建议先取荆州为家，再图益州，三分天下。", "100", "典故"},
+                {"曹操「挟天子以令诸侯」，所挟的是哪位皇帝？", "汉桓帝", "汉灵帝", "汉献帝", "汉少帝", "C", "曹操迎汉献帝至许都，自此把持朝政。", "100", "人物"},
+                {"「既生瑜，何生亮」是周瑜临终前的感慨，指的是谁？", "司马懿", "诸葛亮", "庞统", "陆逊", "B", "周瑜屡为诸葛亮所制，病逝前发出此叹。", "100", "典故"},
+                {"赤壁之战孙刘联军的主帅中，吴军由谁统率？", "鲁肃", "周瑜", "陆逊", "吕蒙", "B", "周瑜为吴军大都督，黄盖行诈降火攻之策。", "100", "人物"},
+                {"「刮骨疗毒」为关羽医治的神医是？", "张仲景", "华佗", "扁鹊", "皇甫谧", "B", "关羽臂中毒箭，华佗刮骨疗毒，其谈笑自若。", "100", "典故"},
+                {"「单刀赴会」中，关羽孤身前往会见的是？", "曹操", "孙权", "周瑜", "鲁肃", "D", "关羽单刀赴会，与鲁肃就荆州之争交锋。", "100", "典故"},
+                {"三国中「赤兔马」先后是吕布与谁的坐骑？", "张飞", "关羽", "赵云", "马超", "B", "赤兔马先属吕布，后归关羽，关羽败亡后绝食而死。", "100", "人物"},
+                {"「空城计」中，诸葛亮在城头抚琴，吓退了谁的追兵？", "司马懿", "曹真", "司马昭", "张郃", "A", "传说诸葛亮空城弹琴，司马懿疑有伏兵而退。", "100", "典故"},
+                {"「鞠躬尽瘁，死而后已」出自诸葛亮的哪篇文章？", "《出师表》", "《隆中对》", "《诫子书》", "《后出师表》", "D", "此句出自《后出师表》，是诸葛亮自明心志之语。", "100", "典故"},
+                {"三国时期蜀汉的都城是今天的哪座城市？", "西安", "成都", "洛阳", "南京", "B", "刘备在成都称帝，蜀汉以成都为都。", "100", "地理"},
+                {"「生子当如孙仲谋」是谁对孙权（字仲谋）的赞叹？", "刘备", "曹操", "袁绍", "司马懿", "B", "曹操见孙权军容整肃，叹曰「生子当如孙仲谋」。", "100", "人物"},
+                {"「过五关斩六将」是关羽千里走单骑投奔谁？", "刘备", "曹操", "孙权", "诸葛亮", "A", "关羽得知刘备下落，过五关斩六将前去相会。", "100", "典故"},
+                {"「白衣渡江」奇袭荆州、擒杀关羽的是哪位东吴将领？", "陆逊", "吕蒙", "周瑜", "鲁肃", "B", "吕蒙令士卒白衣扮商贾渡江，奇袭荆州。", "100", "人物"},
+                {"魏、蜀、吴三国鼎立的局面，以哪一战役为确立的标志？", "官渡之战", "赤壁之战", "夷陵之战", "汉中之战", "B", "赤壁之战后曹操无力南下，奠定了三分天下的格局。", "100", "兵制"}
+        };
+        int sort = 1;
+        for (String[] row : data) {
+            QuizQuestion q = new QuizQuestion();
+            q.setQuestion(row[0]);
+            q.setOptionA(row[1]);
+            q.setOptionB(row[2]);
+            q.setOptionC(row[3]);
+            q.setOptionD(row[4]);
+            q.setAnswer(row[5]);
+            q.setExplanation(row[6]);
+            q.setReward(Integer.valueOf(row[7]));
+            q.setCategory(row[8]);
+            q.setSortOrder(sort++);
+            quizQuestionMapper.insert(q);
+        }
+        log.info("已播种学识问道题库 {} 题", data.length);
     }
 }
