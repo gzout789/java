@@ -5,7 +5,7 @@
  * 技能数据复用 game/rules.js 的 toGameHero（与游戏引擎同一份 HERO_SKILLS，
  * 同时保留后台管理系统覆盖的主技文案），保证图鉴与实战看到的技能一致。
  */
-import { computed, onMounted, onBeforeUnmount } from 'vue'
+import { computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { toGameHero, SKILL_TYPES, factionName } from '../game/rules.js'
 import { heroFullImg, onHeroImgError } from '../composables/useHeroImg'
 
@@ -28,13 +28,20 @@ function skillHint(s) {
   return t ? t.hint : ''
 }
 
-/* Esc 关闭 + 弹窗打开时禁止背景滚动 */
+/* Esc 关闭 + 弹窗打开时禁止背景滚动
+ * 注意：父级 SanguoHome 里本组件是「常驻挂载」的，只用 :hero 控制弹窗显隐，
+ * 关闭弹窗并不会卸载组件。所以锁背景滚动必须跟随 hero 变化，不能写在
+ * onMounted 里无条件执行——否则一进首页 body 就被锁死，整页滑不动。
+ * immediate 还能顺手清掉旧版本代码遗留的行内 overflow:hidden。 */
 function onKey(e) {
   if (e.key === 'Escape') emit('close')
 }
+function syncBodyScroll(hero) {
+  document.body.style.overflow = hero ? 'hidden' : ''
+}
+watch(() => props.hero, syncBodyScroll, { immediate: true })
 onMounted(() => {
   window.addEventListener('keydown', onKey)
-  document.body.style.overflow = 'hidden'
 })
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKey)

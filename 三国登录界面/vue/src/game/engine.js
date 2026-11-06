@@ -34,7 +34,8 @@ export class Game {
     this.seatCount = opts.seatCount || 5
     this.playerName = opts.playerName || '你'
     this.speed = opts.speed || 620
-    this.humanResolve = null
+    this.humanResolve = null // 兼容字段：由 _refreshHumanResolve() 维护，指向最新等待者
+    this._waiters = new Map() // channel -> waiter，见 distance.js 的 waitHuman
     this.running = false
     this._lastProgress = 0 // 看门狗：最近一次回合推进的时间戳
     this._watchdogTimer = null
@@ -127,7 +128,18 @@ export class Game {
       const seat = this.state.seats[this.state.turnIdx]
       if (!seat) break
       if (!seat.alive) {
+        const before = this.state.turnIdx
         this.nextTurn()
+        // nextTurn 找不到存活者时不会改 turnIdx，旧代码会在这里同步空转，
+        // 直接把浏览器标签页锁死。兜底判和局并退出循环。
+        if (this.state.turnIdx === before) {
+          this.warn('阵中已无存活角色，战事终止。')
+          if (!this.state.winner) {
+            this.state.winner = { side: 'draw', text: '两败俱伤，无人生还', playerWin: false }
+          }
+          this.state.phase = 'over'
+          break
+        }
         continue
       }
       this._lastProgress = Date.now()
@@ -151,8 +163,10 @@ export class Game {
       const idle = Date.now() - this._lastProgress
       // 阈值给到 25s，早于 waitHuman 的 30s 超时，正常情况下 waitHuman 会先自愈。
       if (idle < 25000) return
-      // 自愈：若仍有挂起的玩家等待，跳过它，避免主循环永久 await。
-      if (this.humanResolve) {
+      // 自愈：若仍有挂起的玩家等待，清空全部等待槽恢复推进。
+      // 用 hasWaiter() 而不是 humanResolve：后者只指向最新等待者，
+      // 旧的等待槽还挂着时它会是 null，导致看门狗误判「无需自愈」。
+      if (this.hasWaiter()) {
         this.warn('对局疑似停滞，已自动跳过当前等待以恢复推进。')
         this.resolveWait(null)
         this._lastProgress = Date.now()
@@ -219,7 +233,7 @@ export class Game {
     if (seat.isAI) {
       await aiPlayTurn(this, seat)
     } else {
-      await this.waitHuman() // 玩家点「收兵」结束
+      await this.waitHuman('play') // 玩家点「收兵」结束；独立槽，不被响应询问顶掉
     }
     if (this.state.phase !== 'playing') return
 
@@ -348,7 +362,7 @@ export class Game {
       this.log(`${seat.label} 弃置 ${over} 张手牌。`, 'sys')
     } else {
       this.state.pending = { kind: 'discard', idx: seat.idx, need: over }
-      await this.waitHuman()
+      await this.waitHuman('discard') // 独立槽，见 confirmDiscard
       this.state.pending = null
     }
   }
