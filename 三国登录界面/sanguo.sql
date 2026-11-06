@@ -1,17 +1,17 @@
 /*
  Navicat Premium Dump SQL
 
- Source Server         : test
+ Source Server         : localhost_3306
  Source Server Type    : MySQL
- Source Server Version : 80039 (8.0.39)
+ Source Server Version : 80046 (8.0.46)
  Source Host           : localhost:3306
  Source Schema         : sanguo
 
  Target Server Type    : MySQL
- Target Server Version : 80039 (8.0.39)
+ Target Server Version : 80046 (8.0.46)
  File Encoding         : 65001
 
- Date: 05/11/2026 14:51:38
+ Date: 06/11/2026 09:58:24
 */
 
 SET NAMES utf8mb4;
@@ -148,11 +148,14 @@ CREATE TABLE `quiz_earning`  (
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE INDEX `uk_user_question`(`user_id` ASC, `question_id` ASC) USING BTREE,
   INDEX `idx_quiz_user`(`user_id` ASC) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 1 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '答题军饷收益流水表' ROW_FORMAT = Dynamic;
+) ENGINE = InnoDB AUTO_INCREMENT = 4 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '答题军饷收益流水表' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Records of quiz_earning
 -- ----------------------------
+INSERT INTO `quiz_earning` VALUES (1, 1, 1, 100, '2026-11-06 09:37:30');
+INSERT INTO `quiz_earning` VALUES (2, 1, 2, 100, '2026-11-06 09:37:34');
+INSERT INTO `quiz_earning` VALUES (3, 1, 3, 100, '2026-11-06 09:37:40');
 
 -- ----------------------------
 -- Table structure for quiz_question
@@ -171,7 +174,7 @@ CREATE TABLE `quiz_question`  (
   `category` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NULL DEFAULT NULL COMMENT '分类：典故/人物/地理/兵制',
   `sort_order` int NULL DEFAULT 0 COMMENT '排序',
   PRIMARY KEY (`id`) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 21 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '学识问道题库表' ROW_FORMAT = Dynamic;
+) ENGINE = InnoDB AUTO_INCREMENT = 21 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '学识问道题库表' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Records of quiz_question
