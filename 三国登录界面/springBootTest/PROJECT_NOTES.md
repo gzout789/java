@@ -1,14 +1,19 @@
 # PROJECT_NOTES.md —— 给 AI 助手的备忘（重要！先读这个）
 
 > 本文件写给下次开机的 AI 助手（WorkBuddy/CodeBuddy）。
-> 最后一次大改：2026-10-23（本机首次运行，后端源码曾缺失，已重建）
+> 最后一次大改：2026-11-09（前后端 IP 改为局域网 IP 192.168.55.1，支持局域网互访）
 
 ## 项目概况
 
 - **项目**：三国主题登录系统（前端 Vue3 + 后端 Spring Boot 3.4.5 + MyBatis-Plus 3.5.9 + MySQL 8）
-- **根目录**：`C:\Users\user\IdeaProjects\java\三国登录界面\`
+- **根目录**：`D:\workSpace\java\三国登录界面\`
   - 前端：`vue\`（Vite，端口 5173，`/api` 代理到 8081）
   - 后端：`springBootTest\`（端口 8081）
+- **局域网访问（2026-11-09 改）**：本机局域网 IP 为 `192.168.55.1`
+  - 前端 `vite.config.js`：`server.host='0.0.0.0'` + 代理 target `http://192.168.55.1:8081`
+  - 后端 `application.properties`：`server.address=0.0.0.0`（显式，默认即监听所有网卡）
+  - 局域网其他设备访问入口：`http://192.168.55.1:5173`
+  - 启动脚本（`一键启动.bat` / `start_all.bat` 等）内的 localhost 已替换为 192.168.55.1
 - **数据库**：MySQL 8，服务 MySQL80，`root` / `123456`，库名 `sanguo`
   - 库/表/演示数据全部**自动初始化**：JDBC URL 带 `createDatabaseIfNotExist=true`，
     启动执行 `src/main/resources/schema.sql` 建表，`DemoDataSeeder` 幂等播种
@@ -115,8 +120,10 @@ src/main/resources/
 **用途**：前台首页导航栏「后台管理系统」按钮 → `#/admin` → 管理登录（**只有登录，没有注册**）→
 后台控制台，对首页「英雄榜」做增删改查。
 
-**账号**：`admin / admin123`，存在独立表 `admin_user`（BCrypt 加密），
+**账号**：**全局仅一个**，用户名 `管理员`，密码由部署者自行保管（播种默认值见
+`application.properties` 的 `sanguo.seed.admin-*`），存在独立表 `admin_user`（BCrypt 加密），
 与前台 `user` 表物理隔离，两边账号互不通用。`DemoDataSeeder.seedAdmin()` 幂等创建（已存在则跳过，不会覆盖改过的密码）。
+后台登录页已移除「填入演示账号 / 试看」入口与演示提示，不再公开任何账号信息。
 
 **令牌隔离**（重要，改动时别破坏）：
 - 将军令牌 = 只有 `sub`；管理令牌 = `sub` + `role=admin`

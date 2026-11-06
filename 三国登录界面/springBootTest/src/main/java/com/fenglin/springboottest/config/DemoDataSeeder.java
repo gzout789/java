@@ -44,12 +44,12 @@ public class DemoDataSeeder implements ApplicationRunner {
     private final QuizQuestionMapper quizQuestionMapper;
     private final PasswordEncoder passwordEncoder;
 
-    /** 后台管理账号（首次建库播种，之后改密码不会被覆盖），来自环境变量，默认 admin */
-    @Value("${sanguo.seed.admin-username:admin}")
+    /** 后台管理账号（首次建库播种，之后改密码不会被覆盖），来自环境变量，默认「管理员」 */
+    @Value("${sanguo.seed.admin-username:管理员}")
     private String adminUsername;
 
-    /** 后台管理初始密码，来自环境变量，默认 admin123 */
-    @Value("${sanguo.seed.admin-password:admin123}")
+    /** 后台管理初始密码，来自环境变量，默认 425425425 */
+    @Value("${sanguo.seed.admin-password:425425425}")
     private String adminPassword;
 
     /** 演示账号统一初始密码，来自环境变量，默认 danfeng123 */
@@ -200,7 +200,7 @@ public class DemoDataSeeder implements ApplicationRunner {
         admin.setRemark("内置管理员");
         admin.setCreateTime(LocalDateTime.now());
         adminUserMapper.insert(admin);
-        log.info("已创建后台管理账号：{} / {}", adminUsername, adminPassword);
+        log.info("已创建后台管理账号：{}", adminUsername);
     }
 
     private void seedUsers() {

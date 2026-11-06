@@ -19,6 +19,6 @@ if not exist "node_modules" (
 )
 
 echo Starting Sanguo Login dev server...
-echo Browser will open http://localhost:5173/ automatically.
+echo Browser will open http://192.168.55.1:5173/ automatically.
 echo Close this window to stop the server.
 %NPM% run dev

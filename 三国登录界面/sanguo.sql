@@ -1,7 +1,7 @@
 /*
  Navicat Premium Dump SQL
 
- Source Server         : test
+ Source Server         : localhost_3306
  Source Server Type    : MySQL
  Source Server Version : 80039 (8.0.39)
  Source Host           : localhost:3306
@@ -11,7 +11,7 @@
  Target Server Version : 80039 (8.0.39)
  File Encoding         : 65001
 
- Date: 05/11/2026 14:51:38
+ Date: 09/11/2026 09:59:24
 */
 
 SET NAMES utf8mb4;
@@ -36,7 +36,7 @@ CREATE TABLE `admin_user`  (
 -- ----------------------------
 -- Records of admin_user
 -- ----------------------------
-INSERT INTO `admin_user` VALUES (1, 'admin', '$2a$10$jLM5E.VmLHKA9g7v8Qpbq.mBEYvzwXv/CoLIre07R9graOQClFgK6', 'admin', '内置管理员', '2026-11-05 14:50:25', '2026-10-23 14:16:19');
+INSERT INTO `admin_user` VALUES (1, '管理员', '$2a$10$cqBRwa3gnqQt/NZLtBuNW./g32EcAqTWO/PiCn7ozNf2G7ggMhRTK', 'admin', '内置管理员', '2026-11-09 09:35:26', '2026-10-23 14:16:19');
 
 -- ----------------------------
 -- Table structure for gacha_log
@@ -51,11 +51,21 @@ CREATE TABLE `gacha_log`  (
   `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '抽卡时间',
   PRIMARY KEY (`id`) USING BTREE,
   INDEX `idx_gacha_user`(`user_id` ASC) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 1 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '抽卡流水表' ROW_FORMAT = DYNAMIC;
+) ENGINE = InnoDB AUTO_INCREMENT = 11 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '抽卡流水表' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Records of gacha_log
 -- ----------------------------
+INSERT INTO `gacha_log` VALUES (1, 7, 13, 450, 0, '2026-11-09 09:20:01');
+INSERT INTO `gacha_log` VALUES (2, 7, 7, 450, 0, '2026-11-09 09:20:01');
+INSERT INTO `gacha_log` VALUES (3, 7, 7, 450, 795, '2026-11-09 09:20:01');
+INSERT INTO `gacha_log` VALUES (4, 7, 7, 450, 795, '2026-11-09 09:20:01');
+INSERT INTO `gacha_log` VALUES (5, 7, 3, 450, 0, '2026-11-09 09:20:01');
+INSERT INTO `gacha_log` VALUES (6, 7, 19, 450, 0, '2026-11-09 09:20:01');
+INSERT INTO `gacha_log` VALUES (7, 7, 29, 450, 0, '2026-11-09 09:20:01');
+INSERT INTO `gacha_log` VALUES (8, 7, 19, 450, 517, '2026-11-09 09:20:01');
+INSERT INTO `gacha_log` VALUES (9, 7, 16, 450, 0, '2026-11-09 09:20:01');
+INSERT INTO `gacha_log` VALUES (10, 7, 20, 450, 0, '2026-11-09 09:20:01');
 
 -- ----------------------------
 -- Table structure for hero
@@ -148,11 +158,21 @@ CREATE TABLE `quiz_earning`  (
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE INDEX `uk_user_question`(`user_id` ASC, `question_id` ASC) USING BTREE,
   INDEX `idx_quiz_user`(`user_id` ASC) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 1 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '答题军饷收益流水表' ROW_FORMAT = Dynamic;
+) ENGINE = InnoDB AUTO_INCREMENT = 11 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '答题军饷收益流水表' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Records of quiz_earning
 -- ----------------------------
+INSERT INTO `quiz_earning` VALUES (1, 1, 1, 100, '2026-11-06 09:37:30');
+INSERT INTO `quiz_earning` VALUES (2, 1, 2, 100, '2026-11-06 09:37:34');
+INSERT INTO `quiz_earning` VALUES (3, 1, 3, 100, '2026-11-06 09:37:40');
+INSERT INTO `quiz_earning` VALUES (4, 7, 1, 100, '2026-11-09 09:44:43');
+INSERT INTO `quiz_earning` VALUES (5, 7, 2, 100, '2026-11-09 09:44:56');
+INSERT INTO `quiz_earning` VALUES (6, 7, 3, 100, '2026-11-09 09:45:04');
+INSERT INTO `quiz_earning` VALUES (7, 7, 4, 100, '2026-11-09 09:45:22');
+INSERT INTO `quiz_earning` VALUES (8, 7, 5, 100, '2026-11-09 09:45:37');
+INSERT INTO `quiz_earning` VALUES (9, 7, 6, 100, '2026-11-09 09:45:51');
+INSERT INTO `quiz_earning` VALUES (10, 7, 7, 100, '2026-11-09 09:46:04');
 
 -- ----------------------------
 -- Table structure for quiz_question
@@ -171,7 +191,7 @@ CREATE TABLE `quiz_question`  (
   `category` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NULL DEFAULT NULL COMMENT '分类：典故/人物/地理/兵制',
   `sort_order` int NULL DEFAULT 0 COMMENT '排序',
   PRIMARY KEY (`id`) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 21 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '学识问道题库表' ROW_FORMAT = Dynamic;
+) ENGINE = InnoDB AUTO_INCREMENT = 21 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '学识问道题库表' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Records of quiz_question
@@ -210,7 +230,7 @@ CREATE TABLE `recruit`  (
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE INDEX `uk_user_hero`(`user_id` ASC, `hero_id` ASC) USING BTREE,
   INDEX `idx_user`(`user_id` ASC) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 9 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '点将台招募记录表' ROW_FORMAT = DYNAMIC;
+) ENGINE = InnoDB AUTO_INCREMENT = 16 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '点将台招募记录表' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Records of recruit
@@ -223,6 +243,13 @@ INSERT INTO `recruit` VALUES (5, 1, 9, 1035, '2026-10-23 14:10:59');
 INSERT INTO `recruit` VALUES (6, 1, 7, 1060, '2026-10-23 14:10:59');
 INSERT INTO `recruit` VALUES (7, 1, 6, 1150, '2026-10-23 14:10:59');
 INSERT INTO `recruit` VALUES (8, 1, 30, 870, '2026-10-30 14:43:25');
+INSERT INTO `recruit` VALUES (9, 7, 13, 0, '2026-11-09 09:20:01');
+INSERT INTO `recruit` VALUES (10, 7, 7, 0, '2026-11-09 09:20:01');
+INSERT INTO `recruit` VALUES (11, 7, 3, 0, '2026-11-09 09:20:01');
+INSERT INTO `recruit` VALUES (12, 7, 19, 0, '2026-11-09 09:20:01');
+INSERT INTO `recruit` VALUES (13, 7, 29, 0, '2026-11-09 09:20:01');
+INSERT INTO `recruit` VALUES (14, 7, 16, 0, '2026-11-09 09:20:01');
+INSERT INTO `recruit` VALUES (15, 7, 20, 0, '2026-11-09 09:20:01');
 
 -- ----------------------------
 -- Table structure for task
@@ -262,7 +289,7 @@ CREATE TABLE `user`  (
   `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE INDEX `uk_username`(`username` ASC) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 7 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '三国将军账号表' ROW_FORMAT = DYNAMIC;
+) ENGINE = InnoDB AUTO_INCREMENT = 8 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '三国将军账号表' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Records of user
@@ -273,5 +300,6 @@ INSERT INTO `user` VALUES (3, '子龙', '$2a$10$Znz0Lt89UnOiBpgBFG5o9.ganNoxeGaw
 INSERT INTO `user` VALUES (4, '孟德', '$2a$10$z4M8XjpIL.vF6OnQaNdoV.mIZurlToKumqELcvF0O.PALHCxwzfsm', 'wei', '2026-10-23 14:07:04', '2026-10-23 14:07:04');
 INSERT INTO `user` VALUES (5, '仲谋', '$2a$10$ja9r14mt2WMLE.AbDKZ08uT6MoEvR1LlyxqopbgcXClfPGdvmSqB2', 'wu', '2026-10-23 14:07:04', '2026-10-23 14:07:04');
 INSERT INTO `user` VALUES (6, '以德', '$2a$10$8NFmHhfEcFjusoY4DFBdz.DsHvJ4w6cRmAVLGEeP2OzjcveDo5XU.', 'han', '2026-11-02 09:55:04', '2026-11-02 09:55:04');
+INSERT INTO `user` VALUES (7, '我文', '$2a$10$LDaa5Rl7T6PeBeB.9mNDxu6QJZhGmXkG/9DN/r1CPr/v/zxbFtPgu', 'han', '2026-11-09 09:19:33', '2026-11-09 09:19:33');
 
 SET FOREIGN_KEY_CHECKS = 1;

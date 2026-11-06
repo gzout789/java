@@ -5,12 +5,13 @@ import vue from '@vitejs/plugin-vue'
 export default defineConfig({
   plugins: [vue()],
   server: {
+    host: '0.0.0.0', // 监听所有网卡，局域网内其他机器可通过本机 IP 访问
     port: 5173,
     open: true,
     // 开发态把 /api 代理到 Spring Boot 后端（默认 8080），免去跨域
     proxy: {
       '/api': {
-        target: 'http://localhost:8081',
+        target: 'http://192.168.55.1:8081',
         changeOrigin: true
       }
     }

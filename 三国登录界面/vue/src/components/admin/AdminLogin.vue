@@ -9,7 +9,6 @@ const password = ref('')
 const loading = ref(false)
 const errorMsg = ref('')
 const showPwd = ref(false)
-const pwdInput = ref(null)
 const userInput = ref(null)
 
 const canSubmit = computed(
@@ -42,13 +41,6 @@ async function submit() {
   }
   setAdminSession(body.data)
   emit('login-success', body.data)
-}
-
-function fillDemo() {
-  username.value = 'admin'
-  password.value = 'admin123'
-  errorMsg.value = ''
-  if (pwdInput.value) pwdInput.value.focus()
 }
 </script>
 
@@ -91,7 +83,6 @@ function fillDemo() {
             <span class="lb">登录密码</span>
             <div class="pwd-wrap">
               <input
-                ref="pwdInput"
                 v-model="password"
                 :type="showPwd ? 'text' : 'password'"
                 autocomplete="current-password"
@@ -115,11 +106,6 @@ function fillDemo() {
             {{ loading ? '验印中…' : '登 录' }}
           </button>
         </form>
-
-        <div class="lg-foot">
-          <button class="lnk small" type="button" @click="fillDemo">填入演示账号</button>
-          <span class="hint">演示：admin / admin123</span>
-        </div>
       </section>
     </main>
   </div>
@@ -193,10 +179,6 @@ function fillDemo() {
 .lnk:hover {
   color: var(--a-gold-soft);
 }
-.lnk.small {
-  font-size: 12.5px;
-}
-
 .lg-main {
   position: relative;
   flex: 1;
@@ -345,20 +327,6 @@ function fillDemo() {
 .btn-primary:disabled {
   opacity: 0.45;
   cursor: not-allowed;
-}
-
-.lg-foot {
-  margin-top: 18px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-.hint {
-  font-size: 12px;
-  color: var(--a-faint);
-  letter-spacing: 1px;
 }
 
 /* 亮色主题放在文件末尾的非 scoped 样式块中 */

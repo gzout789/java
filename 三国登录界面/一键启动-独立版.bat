@@ -24,18 +24,18 @@ set /a sg_n=0
 :sg_wait
 set /a sg_n+=1
 if %sg_n% gtr 40 goto sg_open
-curl -s -m 2 --noproxy "*" -o nul -w "%%{http_code}" http://localhost:5173/ > "%TEMP%\sg_fe_code.tmp" 2>nul
+curl -s -m 2 --noproxy "*" -o nul -w "%%{http_code}" http://192.168.55.1:5173/ > "%TEMP%\sg_fe_code.tmp" 2>nul
 set "sg_code="
 if exist "%TEMP%\sg_fe_code.tmp" set /p sg_code=<"%TEMP%\sg_fe_code.tmp"
 if "%sg_code%"=="200" goto sg_open
 ping -n 2 127.0.0.1 >nul
 goto sg_wait
 :sg_open
-start "" "http://localhost:5173"
+start "" "http://192.168.55.1:5173"
 echo.
-echo   [OK] 已启动  http://localhost:5173
+echo   [OK] 已启动  http://192.168.55.1:5173
 echo   演示账号   云长 / danfeng123
-echo   后台管理   admin / admin123
+echo   后台管理   唯一账号「管理员」，密码请自行保管
 echo   停止服务   运行同目录 一键停止.bat
 echo.
 timeout /t 10 >nul

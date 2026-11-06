@@ -6,7 +6,7 @@ cd /d "%~dp0"
 
 echo ============================================
 echo   三国登录系统 - 一键启动（前端 + 后端）
-echo   前端: http://localhost:5173  后端: 8081
+echo   前端: http://192.168.55.1:5173  后端: 8081
 echo ============================================
 echo.
 
@@ -59,7 +59,7 @@ set /a htry=0
 set /a htry+=1
 if !htry! gtr 30 goto :healthfail
 rem  注意 --noproxy：避免系统代理(HTTP_PROXY)把 localhost 请求也转发出去导致误判
-curl -s -m 3 --noproxy "*" -X POST "http://localhost:8081/api/login" ^
+curl -s -m 3 --noproxy "*" -X POST "http://192.168.55.1:8081/api/login" ^
      -H "Content-Type: application/json" ^
      -d "{\"username\":\"\u4e91\u957f\",\"password\":\"danfeng123\"}" > "!HEALTH_JSON!" 2>nul
 findstr /c:"success" "!HEALTH_JSON!" >nul 2>nul
@@ -102,11 +102,11 @@ set /a ftry=0
 set /a ftry+=1
 if !ftry! gtr 30 goto :frontfail
 rem 用 HTTP 探测而不是只看端口：端口 LISTENING 不代表能响应
-rem 必须用 localhost（Vite 默认只监听 IPv6 的 [::1]，直连 127.0.0.1 会失败）
+rem 用局域网 IP 探测：vite.config.js 已设 host=0.0.0.0，监听所有网卡
 set "FE_CODE_FILE=%~dp0vue\.fe_code.tmp"
 rem 每次循环先删掉旧文件，避免读到上一轮的残留状态码
 if exist "!FE_CODE_FILE!" del "!FE_CODE_FILE!" >nul 2>nul
-curl -s -m 2 --noproxy "*" -o nul -w "%%{http_code}" "http://localhost:5173/" > "!FE_CODE_FILE!" 2>nul
+curl -s -m 2 --noproxy "*" -o nul -w "%%{http_code}" "http://192.168.55.1:5173/" > "!FE_CODE_FILE!" 2>nul
 set "FE_CODE="
 if exist "!FE_CODE_FILE!" set /p FE_CODE=<"!FE_CODE_FILE!"
 if "!FE_CODE!"=="200" (
@@ -135,7 +135,7 @@ set /a etry=0
 :e2eloop
 set /a etry+=1
 if !etry! gtr 15 goto :e2efail
-curl -s -m 5 --noproxy "*" -X POST "http://localhost:5173/api/login" ^
+curl -s -m 5 --noproxy "*" -X POST "http://192.168.55.1:5173/api/login" ^
      -H "Content-Type: application/json" ^
      -d "{\"username\":\"\u4e91\u957f\",\"password\":\"danfeng123\"}" > "!E2E_JSON!" 2>nul
 findstr /c:"点兵入帐成功" "!E2E_JSON!" >nul 2>nul
@@ -154,7 +154,7 @@ goto :e2eloop
 
 :e2efail
 echo   [警告] 前端到后端的 /api 代理暂时未通，页面可打开但登录可能失败。
-echo          请检查 vue\vite.config.js 中的 proxy 是否指向 http://localhost:8081
+echo          请检查 vue\vite.config.js 中的 proxy 是否指向 http://192.168.55.1:8081
 if exist "!E2E_JSON!" del "!E2E_JSON!" >nul 2>nul
 echo.
 goto :success
@@ -167,16 +167,16 @@ echo.
 echo ============================================
 echo   全部启动完成，可以开始使用了
 echo   ------------------------------------------
-echo   登录页:   http://localhost:5173
+echo   登录页:   http://192.168.55.1:5173
 echo   演示账号: 云长 / danfeng123 （登录页点「试看」自动填入）
-echo   后端接口: http://localhost:8081
+echo   后端接口: http://192.168.55.1:8081
 echo   ------------------------------------------
 echo   停止服务: 运行同目录「一键停止.bat」
 echo ============================================
 echo.
 
 rem 自动打开登录页
-start "" "http://localhost:5173"
+start "" "http://192.168.55.1:5173"
 pause
 exit /b 0
 

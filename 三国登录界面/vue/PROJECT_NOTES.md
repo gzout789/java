@@ -54,10 +54,10 @@ src/game/
   「返回前台」用 `history.replaceState` 抹掉 hash，不产生多余历史记录
 - 文件：
   - `src/composables/useAdmin.js` 管理会话（sessionStorage `sg_admin_session`）+ `adminFetch` + hash 常量
-  - `src/components/admin/AdminLogin.vue` 管理登录（只有登录，无注册；「填入演示账号」= admin/admin123）
+  - `src/components/admin/AdminLogin.vue` 管理登录（只有登录，无注册；已移除「填入演示账号」试看入口与演示提示）
   - `src/components/admin/AdminApp.vue` 控制台：看板（总数/四阵营/平均武力）+ 搜索/阵营/类型筛选 +
     英雄榜表格 + 新增/编辑弹窗 + 删除确认 + toast；支持明暗主题
-- 后台账号：**admin / admin123**（独立 `admin_user` 表），接口前缀 `/api/admin`，与前台令牌互不通用
+- 后台账号：**全局仅一个**，用户名 `管理员`，密码由部署者自行保管（独立 `admin_user` 表）；接口前缀 `/api/admin`，与前台令牌互不通用
 - **大坑**：scoped 样式里写 `:global(html[data-theme='light']) .local` 会被编译器丢弃后半段，
   亮色主题整体失效 —— 两份亮色覆盖都放在组件末尾的**非 scoped** `<style>` 块里，选择器
   手动前缀 `html[data-theme='light'] .admin-app`（`.admin-login` 同理），别改回 scoped 写法
