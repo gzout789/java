@@ -421,6 +421,15 @@ function toggleDiscard(uid) {
   }
 }
 
+/* 收兵兜底：手牌太多/不好点时一键弃够，避免玩家停在弃牌询问里干等超时 */
+function autoDiscard() {
+  const p = pending.value
+  if (!p || p.kind !== 'discard' || !me.value) return
+  const uids = me.value.hand.slice(0, p.need).map((c) => c.uid)
+  discardPick.value = []
+  game.value.confirmDiscard(uids)
+}
+
 /* ==================== 提示文案 ==================== */
 
 const hint = computed(() => {
@@ -633,6 +642,14 @@ function seatClass(idx) {
           >
             认输受创
           </button>
+          <button
+            v-else-if="pending.kind === 'discard'"
+            type="button"
+            class="a-btn primary"
+            @click="autoDiscard()"
+          >
+            自动弃牌（{{ pending.need }} 张）
+          </button>
           <span class="a-tip">点击手牌以响应</span>
         </template>
 
@@ -651,8 +668,8 @@ function seatClass(idx) {
           </button>
         </div>
 
-        <!-- 选中手牌后的可用动作 -->
-        <template v-else-if="selectedCard">
+        <!-- 选中手牌后的可用动作（响应询问期间不出，避免抢答覆盖 state.pending） -->
+        <template v-else-if="selectedCard && !(pending && pending.idx === 0)">
           <button
             v-for="opt in cardOptions"
             :key="opt.key"
@@ -665,8 +682,8 @@ function seatClass(idx) {
           <button type="button" class="a-btn ghost" @click="cancelSelect()">取消</button>
         </template>
 
-        <!-- 出牌阶段常规操作 -->
-        <template v-else-if="myTurn && st.stage === 'play'">
+        <!-- 出牌阶段常规操作（有响应询问时先答题，否则点「收兵」会顶掉 pending） -->
+        <template v-else-if="myTurn && st.stage === 'play' && !(pending && pending.idx === 0)">
           <button
             v-if="myActives.length === 1"
             type="button"
