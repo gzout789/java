@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import { authHeaders, theme, toggleTheme } from '../../composables/useTheme.js'
 import { heroImg, onHeroImgError } from '../../composables/useHeroImg.js'
+import { useGameSocket } from '../../composables/useGameSocket.js'
 import { createGame } from '../../game/engine.js'
 import {
   toGameHero, ROLES, CARDS, EQUIPS, SKILL_TYPES, cardName, isDelay, isEquip
@@ -10,7 +11,9 @@ import GameSeat from './GameSeat.vue'
 import GameCard from './GameCard.vue'
 
 const props = defineProps({
-  user: { type: Object, default: null }
+  user: { type: Object, default: null },
+  /* 组队出征带进来的房号：联机时用它连 /ws/game，单机时用于席位名号与战报 */
+  teamCode: { type: String, default: '' }
 })
 const emit = defineEmits(['exit'])
 
@@ -19,6 +22,24 @@ const error = ref('')
 const heroPool = ref([])
 const game = ref(null)
 const logBox = ref(null)
+const teamLabels = ref([])
+const reportSent = ref(false)
+
+/* ---- 联机会话 ----
+ * 房主浏览器持有唯一的权威牌局；队员端只有脱敏快照 + 规则查询 + 动作代理。
+ * 服务端负责席位分配、按席位分发快照、把队员动作转发给房主。 */
+const online = ref(false)
+const connected = ref(false)
+const netError = ref('')
+const mySeatIdx = ref(0)
+const humanSeats = ref([0])
+const isHost = ref(false)
+const seatNames = ref({})
+const members = ref([])
+const picked = ref(false)
+const picks = ref({})
+const hostLost = ref(false)
+let conn = null
 
 /* 交互态 */
 const selectedUid = ref(null)
@@ -30,9 +51,9 @@ const toastText = ref('')
 let toastTimer = null
 
 const st = computed(() => (game.value ? game.value.state : null))
-const me = computed(() => (st.value ? st.value.seats[0] : null))
+const me = computed(() => (st.value ? st.value.seats[mySeatIdx.value] : null))
 const pending = computed(() => (st.value ? st.value.pending : null))
-const myTurn = computed(() => !!st.value && st.value.phase === 'playing' && st.value.turnIdx === 0)
+const myTurn = computed(() => !!st.value && st.value.phase === 'playing' && st.value.turnIdx === mySeatIdx.value)
 const selectedCard = computed(() =>
   me.value ? me.value.hand.find((c) => c.uid === selectedUid.value) || null : null
 )
@@ -45,6 +66,7 @@ const stageName = computed(() => STAGE_NAMES[st.value ? st.value.stage : ''] || 
 onMounted(loadHeroes)
 onBeforeUnmount(() => {
   if (game.value) game.value.destroy()
+  if (conn) conn.close()
 })
 
 async function loadHeroes() {
@@ -59,7 +81,13 @@ async function loadHeroes() {
       return
     }
     heroPool.value = list.map(toGameHero)
-    newGame()
+    if (props.teamCode) {
+      online.value = true
+      initOnline()
+    } else {
+      await loadTeamLabels()
+      newGame()
+    }
   } catch (e) {
     error.value = '读取英雄榜失败：' + (e && e.message ? e.message : '网络异常')
   } finally {
@@ -67,15 +95,163 @@ async function loadHeroes() {
   }
 }
 
+/* 单机开局：读取联队成员，把同袍名号挂到牌桌其余席位上 */
+async function loadTeamLabels() {
+  try {
+    const res = await fetch('/api/team', { headers: authHeaders() })
+    const body = await res.json().catch(() => null)
+    const list = body && body.data && body.data.room ? body.data.room.members : []
+    const me = (props.user && props.user.username) || ''
+    teamLabels.value = (Array.isArray(list) ? list : [])
+      .filter((m) => !m.isMe && m.username !== me)
+      .map((m) => m.username)
+  } catch {
+    teamLabels.value = []
+  }
+}
+
+/* ==================== 联机会话 ==================== */
+
+function initOnline() {
+  conn = useGameSocket({ code: props.teamCode, onMessage: onSocketMessage })
+  watch(conn.connected, (v) => { connected.value = v })
+  watch(conn.error, (v) => { netError.value = v })
+  conn.connect()
+}
+
+function onlineOptions() {
+  return {
+    seatCount: 5,
+    humanSeats: humanSeats.value,
+    mySeatIdx: mySeatIdx.value,
+    seatNames: seatNames.value,
+    online: true,
+    playerName: (props.user && props.user.username) || '你'
+  }
+}
+
+function createOnlineGame() {
+  if (game.value) game.value.destroy()
+  resetUI()
+  const opts = onlineOptions()
+  if (isHost.value) {
+    // 房主是唯一的权威牌局：状态一变就生成按席位脱敏的快照交给服务端广播
+    game.value = createGame(heroPool.value, {
+      ...opts,
+      onSnapshot: (views) => conn && conn.send({ t: 'state', views })
+    })
+  } else {
+    // 队员端只跑规则查询，动作一律转成协议发给房主结算
+    game.value = createGame(heroPool.value, {
+      ...opts,
+      remote: true,
+      onAction: (kind, payload) => conn && conn.send({ t: 'action', kind, ...payload })
+    })
+  }
+}
+
+function onSocketMessage(msg) {
+  switch (msg.t) {
+    case 'hello': {
+      mySeatIdx.value = msg.seatIdx
+      humanSeats.value = msg.humanSeats || [msg.seatIdx]
+      isHost.value = !!msg.isHost
+      seatNames.value = msg.seatNames || {}
+      members.value = msg.members || []
+      picked.value = false
+      picks.value = {}
+      hostLost.value = false
+      createOnlineGame()
+      // prepare 会触发引擎的 state 监听，自动把候选将广播给全体队员
+      if (isHost.value) game.value.prepare()
+      break
+    }
+    case 'state':
+      // 房主自己就是状态源；队员用脱敏快照覆盖本地 state
+      if (!isHost.value && game.value) game.value.applyView(msg.view)
+      break
+    case 'reset':
+      if (!isHost.value) {
+        picked.value = false
+        picks.value = {}
+        reportSent.value = false
+        resetUI()
+      }
+      break
+    case 'action': {
+      // 只有房主会收到队员动作
+      if (msg.kind === 'restart') { restartAsHost(); return }
+      if (game.value) game.value.applyRemoteAction(msg.kind, msg)
+      break
+    }
+    case 'pick':
+      if (isHost.value) registerPick(msg.fromSeat, msg.heroId)
+      break
+    case 'member': {
+      const list = members.value.slice()
+      const hit = list.find((m) => m.seatIdx === msg.seatIdx)
+      if (hit) hit.online = msg.kind === 'join'
+      else list.push({ seatIdx: msg.seatIdx, username: msg.username, online: msg.kind === 'join' })
+      members.value = list
+      break
+    }
+    case 'host-lost':
+      hostLost.value = true
+      toast('房主已离阵，本局无法继续推进')
+      break
+    case 'error':
+      netError.value = msg.message || '联机通道异常'
+      break
+    default:
+      break
+  }
+}
+
+/** 房主汇总全体真人的选将，收齐后统一开局，保证所有人看到同一副牌 */
+function registerPick(seat, heroId) {
+  if (!heroId) return
+  picks.value = { ...picks.value, [seat]: heroId }
+  if (humanSeats.value.every((i) => picks.value[i])) {
+    game.value.start(picks.value)
+  }
+}
+
+function restartAsHost() {
+  picked.value = false
+  picks.value = {}
+  reportSent.value = false
+  createOnlineGame()
+  game.value.prepare()
+  if (conn) conn.send({ t: 'reset' })
+}
+
 function newGame() {
   if (game.value) game.value.destroy()
   resetUI()
+  reportSent.value = false
   game.value = createGame(heroPool.value, {
     seatCount: 5,
-    playerName: (props.user && props.user.username) || '你'
+    playerName: (props.user && props.user.username) || '你',
+    seatLabels: teamLabels.value
   })
   game.value.prepare()
 }
+
+/* 一局终了把战报传回联队频道：联机时只由房主上报，避免同袍刷屏 */
+watch(
+  () => st.value && st.value.winner,
+  (winner) => {
+    if (!winner || !props.teamCode || reportSent.value) return
+    if (online.value && !isHost.value) return
+    reportSent.value = true
+    const who = (props.user && props.user.username) || '某将'
+    fetch('/api/team/report', {
+      method: 'POST',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ content: `【战报】${who} 一局终了：${winner.text || '胜负已分'}` })
+    }).catch(() => {})
+  }
+)
 
 function resetUI() {
   selectedUid.value = null
@@ -87,15 +263,21 @@ function resetUI() {
 
 function startGame(heroId) {
   resetUI()
-  game.value.start(heroId)
+  if (!online.value) return game.value.start(heroId)
+  picked.value = true
+  if (isHost.value) registerPick(mySeatIdx.value, heroId)
+  else if (conn) conn.send({ t: 'pick', heroId })
 }
 
 function restart() {
-  newGame()
+  if (!online.value) return newGame()
+  if (isHost.value) restartAsHost()
+  else if (conn) conn.send({ t: 'action', kind: 'restart', idx: mySeatIdx.value })
 }
 
 function exit() {
   if (game.value) game.value.destroy()
+  if (conn) conn.close()
   emit('exit')
 }
 
@@ -124,12 +306,12 @@ function onHandCard(card) {
   const p = pending.value
 
   /* 收兵弃牌必须放在响应分支之前：
-     响应分支以「p.idx === 0 就 return」收尾，写在它后面的话，玩家自己收兵时
+     响应分支以「p.idx === mySeatIdx.value 就 return」收尾，写在它后面的话，玩家自己收兵时
      点手牌永远进不到 toggleDiscard，回合会卡死在弃牌这一步 */
-  if (p && p.idx === 0 && p.kind === 'discard') return toggleDiscard(card.uid)
+  if (p && p.idx === mySeatIdx.value && p.kind === 'discard') return toggleDiscard(card.uid)
 
   // 响应阶段：直接把牌交出去
-  if (p && p.idx === 0) {
+  if (p && p.idx === mySeatIdx.value) {
     if (p.kind === 'dodge' && g.canBeDodge(me.value, card)) return respond('dodge', card.uid)
     if (p.kind === 'save' && (card.key === 'heal' || (p.allowRed && ['heart', 'diamond'].includes(card.suit)))) {
       return respond('save', card.uid)
@@ -187,7 +369,7 @@ function playSelected(asKey) {
   } else if (isDelay(key) || key === 'steal' || key === 'duel') {
     cands = g.schemeTargets(me.value, key).map((s) => s.idx)
   } else {
-    cands = [0]
+    cands = [mySeatIdx.value]
   }
 
   if (!cands.length) {
@@ -213,7 +395,7 @@ function onSeatClick(seat) {
   const g = game.value
   if (!g) return
   // 响应询问优先：此时点座位不应再触发出牌，避免两条异步链同时弹询问
-  if (pending.value && pending.value.idx === 0) return
+  if (pending.value && pending.value.idx === mySeatIdx.value) return
   // 只在自己用兵阶段允许指定目标，回合一旦被推进就立刻收掉选目标态
   const canTarget = myTurn.value && st.value.stage === 'play'
   if (selecting.value && selecting.value.candidates.includes(seat.idx)) {
@@ -231,7 +413,7 @@ function onSeatClick(seat) {
   if (m && m.need === 'target') {
     if (!canTarget) return
     if (!seat.alive) return
-    if (seat.idx === 0 && !m.self) return
+    if (seat.idx === mySeatIdx.value && !m.self) return
     if (m.eff === 'secret_unblockable' && !g.inReach(me.value, seat)) {
       return toast('超出攻击范围')
     }
@@ -289,7 +471,7 @@ const mySecret = computed(() => {
 /** 需要选目标的技能 → 目标候选 */
 function skillTargetsOf(eff) {
   const g = game.value
-  const alive = st.value.seats.filter((s) => s.alive && s.idx !== 0)
+  const alive = st.value.seats.filter((s) => s.alive && s.idx !== mySeatIdx.value)
   if (eff === 'heal_skill') {
     // 青囊可救自己
     return st.value.seats.filter((s) => s.alive && s.hp < s.maxHp)
@@ -472,7 +654,7 @@ const hint = computed(() => {
     return `${label} ${cnt} 张手牌以发动（已选 ${m.picked.length} 张）`
   }
   const p = pending.value
-  if (p && p.idx !== 0) return `${st.value.seats[p.idx].label} 正在抉择…`
+  if (p && p.idx !== mySeatIdx.value) return `${st.value.seats[p.idx].label} 正在抉择…`
   if (p && p.kind === 'discard') return `收兵：需弃置 ${p.need} 张手牌（点击手牌选择）`
   if (p && p.kind === 'dodge') return p.text
   if (p && p.kind === 'save') return p.text
@@ -486,7 +668,7 @@ const hint = computed(() => {
 
 const canAct = computed(() => {
   const p = pending.value
-  if (p && p.idx === 0) return true
+  if (p && p.idx === mySeatIdx.value) return true
   if (!p && myTurn.value && st.value.stage === 'play') return true
   return false
 })
@@ -538,6 +720,14 @@ function seatClass(idx) {
         {{ theme === 'dark' ? '☾ 夜色' : '☀ 宣纸' }}
       </button>
       <button type="button" class="t-btn" @click="exit">收兵回营</button>
+      <div v-if="online" class="net-bar">
+        <span class="nb-code">联队 {{ teamCode }}</span>
+        <span>第 {{ mySeatIdx + 1 }} 席 · {{ isHost ? '房主（权威牌局）' : '队员' }}</span>
+        <span :class="['nb-state', connected ? 'ok' : 'off']">{{ connected ? '联机中' : '连接中…' }}</span>
+        <span class="nb-members">{{ members.map((m) => m.username).join(' · ') }}</span>
+        <span v-if="hostLost" class="nb-warn">房主已离阵，本局无法继续</span>
+        <span v-if="netError" class="nb-warn">{{ netError }}</span>
+      </div>
     </header>
 
     <!-- 载入 / 错误 -->
@@ -550,7 +740,10 @@ function seatClass(idx) {
     <!-- 选将 -->
     <section v-else-if="st.phase === 'select'" class="pick">
       <h2 class="pick-title">择一良将出战</h2>
-      <p class="pick-tip">武将悉数取自英雄榜；体力与武将技可在后台管理系统调整</p>
+      <p v-if="online" class="pick-tip">
+        同袍共择 · {{ picked ? '已择将，静候其余同袍…' : '全体同袍择将完毕后，由房主统一开局' }}
+      </p>
+      <p v-else class="pick-tip">武将悉数取自英雄榜；体力与武将技可在后台管理系统调整</p>
       <div class="pick-grid">
         <button
           v-for="h in st.candidates"
@@ -558,6 +751,7 @@ function seatClass(idx) {
           type="button"
           class="pick-card"
           :style="{ '--fac': h.factionColor }"
+          :disabled="online && picked"
           @click="startGame(h.id)"
         >
           <div class="pc-top">
@@ -597,11 +791,11 @@ function seatClass(idx) {
           :key="s.idx"
           :class="seatClass(s.idx)"
           :seat="s"
-          :is-me="s.idx === 0"
+          :is-me="s.idx === mySeatIdx"
           :current="st.turnIdx === s.idx && st.phase === 'playing'"
           :selectable="
             !!(selecting && selecting.candidates.includes(s.idx)) ||
-            !!(skillMode && skillMode.need === 'target' && s.alive && (skillMode.self || s.idx !== 0))
+            !!(skillMode && skillMode.need === 'target' && s.alive && (skillMode.self || s.idx !== mySeatIdx))
           "
           @pick="onSeatClick"
         />
@@ -609,7 +803,7 @@ function seatClass(idx) {
           <div class="c-round">第 {{ st.round }} 轮</div>
           <div class="c-stage">{{ stageName }}阶段</div>
           <div class="c-piles">
-            <span>牌堆 {{ st.deck.length }}</span>
+            <span>牌堆 {{ st.deckCount ?? st.deck.length }}</span>
             <span>弃牌 {{ st.discard.length }}</span>
           </div>
         </div>
@@ -634,7 +828,7 @@ function seatClass(idx) {
 
       <div class="action-row">
         <!-- 响应 -->
-        <template v-if="pending && pending.idx === 0">
+        <template v-if="pending && pending.idx === mySeatIdx">
           <button
             v-if="pending.kind === 'dodge'"
             type="button"
@@ -747,7 +941,7 @@ function seatClass(idx) {
              若用 v-if 插在链中间，后面的 v-else-if 会挂到它上面，
              响应按钮和「静观其变…」就会同时出现。 -->
         <div
-          v-if="skillMenu && myTurn && st.stage === 'play' && !selectedCard && !selecting && !(pending && pending.idx === 0)"
+          v-if="skillMenu && myTurn && st.stage === 'play' && !selectedCard && !selecting && !(pending && pending.idx === mySeatIdx)"
           class="skill-menu"
         >
           <button
@@ -779,7 +973,7 @@ function seatClass(idx) {
               discardPick.includes(c.uid) ||
               (skillMode && skillMode.picked.includes(c.uid))
             "
-            :disabled="!canAct && !(pending && pending.kind === 'discard' && pending.idx === 0)"
+            :disabled="!canAct && !(pending && pending.kind === 'discard' && pending.idx === mySeatIdx)"
             @pick="onHandCard"
           />
           <span v-if="!me.hand.length" class="empty-hand">两手空空</span>
@@ -828,11 +1022,35 @@ function seatClass(idx) {
 .g-top {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 10px;
   padding: 10px 16px;
   border-bottom: 1px solid var(--g-hair);
   background: var(--g-panel);
 }
+/* 联机状态条：整行换行，不挤占顶栏按钮 */
+.net-bar {
+  flex: 0 0 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-top: 2px;
+  font-size: 11px;
+  color: var(--g-faint);
+  min-width: 0;
+}
+.nb-code {
+  color: var(--g-gold);
+  letter-spacing: 1px;
+}
+.nb-state.ok { color: #7fb08a; }
+.nb-state.off { color: #d9b23a; }
+.nb-members {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.nb-warn { color: #c9513f; }
 .brand {
   display: flex;
   align-items: baseline;
@@ -939,6 +1157,15 @@ function seatClass(idx) {
   transform: translateY(-4px);
   box-shadow: 0 14px 30px -14px rgba(0, 0, 0, 0.7);
   border-color: var(--g-gold);
+}
+.pick-card:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.pick-card:disabled:hover {
+  transform: none;
+  box-shadow: none;
+  border-color: var(--g-hair);
 }
 .pc-top {
   display: flex;

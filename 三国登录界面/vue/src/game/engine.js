@@ -10,7 +10,7 @@
  * 拆分到 engine/ 下的 mixin 模块，经 Object.assign(Game.prototype, ...) 合并，
  * 方法与实例状态（this.state）关系不变，纯组织性重构，无运行时行为变化。
  */
-import { reactive, markRaw } from 'vue'
+import { reactive, markRaw, watch } from 'vue'
 import {
   ROLES, ROLE_SETUP,
   buildDeck, judgeResult, shuffle, cardName, suitSymbol
@@ -33,22 +33,42 @@ export class Game {
     this.heroes = heroes
     this.seatCount = opts.seatCount || 5
     this.playerName = opts.playerName || '你'
+    /* 单机组队开局时，把同袍名号挂到其余席位上（不足的席位仍用武将名） */
+    this.seatLabels = opts.seatLabels || []
+
+    /* ---- 联机席位 ----
+     * humanSeats：由真人操控的席位 idx 列表（其余席位交给 AI）
+     * mySeatIdx ：本机玩家坐在第几席（单机恒为 0）
+     * seatNames ：idx -> 名号，联机时用于座位标签
+     * remote    ：队员端影子实例——不跑主循环，动作一律转发给房主
+     */
+    this.humanSeats = opts.humanSeats || [0]
+    this.mySeatIdx = opts.mySeatIdx ?? 0
+    this.seatNames = opts.seatNames || {}
+    this.online = opts.online !== undefined ? !!opts.online : this.humanSeats.length > 1
+    this.remote = !!opts.remote
+    this.onAction = opts.onAction || null
+    this.onSnapshot = opts.onSnapshot || null
+
     this.speed = opts.speed || 620
     this.humanResolve = null // 兼容字段：由 _refreshHumanResolve() 维护，指向最新等待者
     /* 必须 markRaw：Game 实例被组件放进 ref() 后会变成响应式代理，普通 Map 经代理
        get() 返回的是「代理对象」，waitHuman 里的 slots.get(channel) === w 恒为 false，
        等待槽永远删不掉 → hasWaiter() 恒真 → 看门狗每 25s 误触发一次。*/
-    this._waiters = markRaw(new Map()) // channel -> 等待队列，见 distance.js 的 waitHuman
+    this._waiters = markRaw(new Map()) // 槽键 -> 等待队列，见 distance.js 的 waitHuman
     this._pendingQueue = markRaw([]) // 响应询问队列，见 distance.js 的 pushPending
     this._pendingToken = 0
     this.running = false
     this._lastProgress = 0 // 看门狗：最近一次回合推进的时间戳
     this._watchdogTimer = null
+    this._snapTimer = null
+    this._stopWatch = null
 
     this.state = reactive({
       phase: 'select', // select → playing → over
       seats: [],
       deck: [],
+      deckCount: null, // 联机快照里牌堆只带数量；为 null 时 UI 回退到 deck.length
       discard: [],
       turnIdx: 0,
       round: 1,
@@ -60,6 +80,14 @@ export class Game {
       winner: null, // { side, text }
       lastKilled: null
     })
+
+    /* 队员端把动作方法替换成协议发送；规则查询方法（usableAs / slashTargets 等）
+       仍走原引擎实现，因此 UI 层无需为联机重写任何交互逻辑。 */
+    if (this.remote) this._installRemoteProxy()
+    /* 房主端深度监听 state，变化后节流生成按席位脱敏的快照交给上层广播 */
+    if (!this.remote && this.onSnapshot) {
+      this._stopWatch = watch(this.state, () => this._scheduleSnapshot(), { deep: true, flush: 'post' })
+    }
   }
 
   /* ==================== 开局 ==================== */
@@ -73,15 +101,29 @@ export class Game {
     return this.state.candidates
   }
 
-  /** 玩家选将后开局：分配身份、发牌 */
-  start(heroId) {
-    const chosen = this.state.candidates.find((h) => h.id === heroId) || this.state.candidates[0]
-    const rest = shuffle(this.heroes.filter((h) => h.id !== chosen.id))
+  /**
+   * 选将后开局：分配身份、发牌。
+   * 单机传 heroId；联机传 { 席位idx: heroId }（房主汇总全体真人选择后调用）。
+   */
+  start(heroChoices) {
+    const raw = (heroChoices && typeof heroChoices === 'object')
+      ? heroChoices
+      : { [this.mySeatIdx]: heroChoices }
+    const chosenBy = {}
+    const used = new Set()
+    for (const key of Object.keys(raw)) {
+      const h = this.state.candidates.find((x) => x.id === raw[key]) || this.state.candidates[0]
+      if (!h) continue
+      chosenBy[Number(key)] = h
+      used.add(h.id)
+    }
+    const rest = shuffle(this.heroes.filter((h) => !used.has(h.id)))
+    let aiCursor = 0
 
     const roles = shuffle(ROLE_SETUP[this.seatCount] || ROLE_SETUP[5])
     const seats = []
     for (let i = 0; i < this.seatCount; i++) {
-      const hero = i === 0 ? chosen : rest[i - 1]
+      const hero = chosenBy[i] || rest[aiCursor++]
       const role = roles[i]
       const maxHp = hero.hp + (role === 'lord' ? 1 : 0)
       seats.push({
@@ -95,8 +137,8 @@ export class Game {
         equip: { weapon: null, armor: null, minusHorse: null, plusHorse: null },
         traps: [],
         alive: true,
-        isAI: i !== 0,
-        label: i === 0 ? this.playerName : hero.name,
+        isAI: !this.humanSeats.includes(i),
+        label: this.seatNames[i] || (i === 0 ? this.playerName : (this.seatLabels[i - 1] || hero.name)),
         // 回合内标记
         slashCount: 0,
         onceUsed: {},
@@ -116,10 +158,15 @@ export class Game {
 
     for (const s of seats) this.drawCards(s, 4)
 
-    const me = seats[0]
+    const me = seats[this.mySeatIdx] || seats[0]
     this.log(`汉室倾颓，${this.seatCount} 路豪杰会于阵前。`, 'sys')
-    this.log(`你抽得身份【${ROLES[me.role].name}】，${ROLES[me.role].goal}。`, me.role === 'lord' ? 'gold' : 'sys')
-    this.log('汉主已明置身份，其余诸将暗藏机心。', 'sys')
+    if (this.online) {
+      // 战报是广播给全体同袍的，不能出现只对本机成立的「你」
+      this.log('汉主已明置身份，其余诸将暗藏机心；各将身份仅自己可见。', 'sys')
+    } else {
+      this.log(`你抽得身份【${ROLES[me.role].name}】，${ROLES[me.role].goal}。`, me.role === 'lord' ? 'gold' : 'sys')
+      this.log('汉主已明置身份，其余诸将暗藏机心。', 'sys')
+    }
 
     this.running = true
     this._startWatchdog()
@@ -194,6 +241,136 @@ export class Game {
     }
   }
 
+  /* ==================== 联机：动作代理 / 快照 ==================== */
+
+  /** 队员端影子实例：把动作方法替换成协议发送，规则查询仍走原实现 */
+  _installRemoteProxy() {
+    const send = (kind, payload) => {
+      if (this.onAction) this.onAction(kind, payload || {})
+    }
+    const idxOf = (seat) => (seat && typeof seat.idx === 'number' ? seat.idx : this.mySeatIdx)
+    this.useCard = (seat, card, targetIdx, as) => send('playCard', {
+      idx: idxOf(seat), cardUid: card && card.uid, targetIdx, as: as || null
+    })
+    this.useSkill = (seat, payload) => send('skill', { idx: idxOf(seat), payload: payload || {} })
+    this.useSecretSkill = (seat, payload) => send('secretSkill', { idx: idxOf(seat), payload: payload || {} })
+    this.submit = (action) => send('respond', { idx: this.mySeatIdx, action: action || null })
+    this.endPlayPhase = () => send('endPlay', { idx: this.mySeatIdx })
+    this.confirmDiscard = (uids) => send('discard', { idx: this.mySeatIdx, uids: uids || [] })
+    this.start = () => {} // 队员端由快照驱动，绝不本地开局
+  }
+
+  /** 房主端把队员动作还原成一次本地引擎调用 */
+  applyRemoteAction(kind, p) {
+    const data = p || {}
+    const seat = this.state.seats[data.idx]
+    const guard = (r) => Promise.resolve(r).catch((e) => console.error('[联机] 动作结算异常', e))
+    switch (kind) {
+      case 'playCard': {
+        if (!seat) return
+        const card = seat.hand.find((c) => c.uid === data.cardUid)
+        if (!card) return
+        guard(this.useCard(seat, card, data.targetIdx, data.as || undefined))
+        return
+      }
+      case 'skill':
+        if (seat) guard(this.useSkill(seat, data.payload || {}))
+        return
+      case 'secretSkill':
+        if (seat) guard(this.useSecretSkill(seat, data.payload || {}))
+        return
+      case 'respond':
+        this.submit(data.action || null, data.idx)
+        return
+      case 'endPlay':
+        this.endPlayPhase(data.idx)
+        return
+      case 'discard':
+        this.confirmDiscard(data.uids || [], data.idx)
+        return
+      default:
+        return
+    }
+  }
+
+  /** 状态变化后节流生成快照，避免一次结算里连发几十帧 */
+  _scheduleSnapshot() {
+    if (!this.onSnapshot || this._snapTimer) return
+    this._snapTimer = setTimeout(() => {
+      this._snapTimer = null
+      try {
+        this.onSnapshot(this.snapshotViews())
+      } catch (e) {
+        console.error('[联机] 快照生成失败', e)
+      }
+    }, 90)
+  }
+
+  /**
+   * 按真人席位生成脱敏视图：
+   * - 别人的手牌只留数量占位，牌堆只留数量（不能让队员看到未来摸的牌）
+   * - 未明置身份在结算前一律藏掉，结算后全部翻开
+   * - 胜负按「这一席位自己的身份」重算
+   * - 响应文案里的「你」改写成被询问者的名号
+   */
+  snapshotViews() {
+    const views = {}
+    for (const idx of this.humanSeats) {
+      const v = JSON.parse(JSON.stringify(this.state))
+      v.mySeatIdx = idx
+      v.deckCount = v.deck.length
+      v.deck = []
+      for (const s of v.seats) {
+        if (s.idx !== idx) {
+          s.handCount = s.hand.length
+          s.hand = Array.from({ length: s.handCount }, () => ({ hidden: true }))
+          s.marks = {}
+          if (v.phase !== 'over' && !s.roleOpen) s.role = 'hidden'
+        }
+      }
+      if (v.phase === 'over') for (const s of v.seats) s.roleOpen = true
+      if (v.pending && v.pending.idx !== idx && typeof v.pending.text === 'string') {
+        const who = v.seats[v.pending.idx]
+        v.pending.text = v.pending.text.replace(/你/g, who ? who.label : '该将')
+      }
+      if (v.winner) v.winner.playerWin = this.winFor(idx, v.winner)
+      views[String(idx)] = v
+    }
+    return views
+  }
+
+  /** 某一席位的身份是否属于获胜方 */
+  winFor(idx, winner) {
+    const s = this.state.seats[idx]
+    if (!s) return false
+    const role = s.role
+    return (
+      (winner.side === 'lord' && (role === 'lord' || role === 'loyal')) ||
+      (winner.side === 'rebel' && role === 'rebel') ||
+      (winner.side === 'spy' && role === 'spy')
+    )
+  }
+
+  /** 队员端把一份脱敏快照写进本地 state，供 UI 与规则查询使用 */
+  applyView(view) {
+    if (!view) return
+    const s = this.state
+    s.phase = view.phase
+    s.seats = view.seats || []
+    s.deck = view.deck || []
+    s.deckCount = typeof view.deckCount === 'number' ? view.deckCount : null
+    s.discard = view.discard || []
+    s.turnIdx = view.turnIdx || 0
+    s.round = view.round || 1
+    s.stage = view.stage || ''
+    s.log = view.log || []
+    s.pending = view.pending || null
+    s.selection = null
+    s.candidates = view.candidates || []
+    s.winner = view.winner || null
+    s.lastKilled = view.lastKilled || null
+  }
+
   nextTurn() {
     const n = this.state.seats.length
     let idx = this.state.turnIdx
@@ -243,7 +420,8 @@ export class Game {
     if (seat.isAI) {
       await aiPlayTurn(this, seat)
     } else {
-      await this.waitHuman('play') // 玩家点「收兵」结束；独立槽，不被响应询问顶掉
+      // 联机按席位隔离等待槽：多人各自出牌 / 收兵时互不顶掉
+      await this.waitHuman('play', seat.idx)
     }
     if (this.state.phase !== 'playing') return
 
@@ -341,7 +519,7 @@ export class Game {
         oldCard: judgeCard,
         text: `${target.label} 的【${cardName(trapKey)}】判定中（${judgeCard.num}${suitSymbol(judgeCard.suit)}），是否打出手牌以【${sk.name}】改判？`
       })
-      const action = await this.waitHuman()
+      const action = await this.waitHuman('response', s.idx)
       this.clearPending(tok)
       if (action && action.type === 'judgeSwap') {
         const card = s.hand.find((c) => c.uid === action.cardUid)
@@ -372,7 +550,7 @@ export class Game {
       this.log(`${seat.label} 弃置 ${over} 张手牌。`, 'sys')
     } else {
       const tok = this.pushPending({ kind: 'discard', idx: seat.idx, need: over })
-      await this.waitHuman('discard') // 独立槽，见 confirmDiscard
+      await this.waitHuman('discard', seat.idx) // 独立槽，见 confirmDiscard
       this.clearPending(tok)
     }
   }

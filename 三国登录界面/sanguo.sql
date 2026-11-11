@@ -1,17 +1,17 @@
 /*
  Navicat Premium Dump SQL
 
- Source Server         : huj
+ Source Server         : localhost_3306
  Source Server Type    : MySQL
- Source Server Version : 80408 (8.4.8)
+ Source Server Version : 80046 (8.0.46)
  Source Host           : localhost:3306
  Source Schema         : sanguo
 
  Target Server Type    : MySQL
- Target Server Version : 80408 (8.4.8)
+ Target Server Version : 80046 (8.0.46)
  File Encoding         : 65001
 
- Date: 11/11/2026 13:28:29
+ Date: 11/11/2026 16:53:55
 */
 
 SET NAMES utf8mb4;
@@ -37,6 +37,65 @@ CREATE TABLE `admin_user`  (
 -- Records of admin_user
 -- ----------------------------
 INSERT INTO `admin_user` VALUES (1, '管理员', '$2a$10$cqBRwa3gnqQt/NZLtBuNW./g32EcAqTWO/PiCn7ozNf2G7ggMhRTK', 'admin', '内置管理员', '2026-11-11 13:26:13', '2026-10-23 14:16:19');
+
+-- ----------------------------
+-- Table structure for friend_message
+-- ----------------------------
+DROP TABLE IF EXISTS `friend_message`;
+CREATE TABLE `friend_message`  (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `from_user_id` bigint NOT NULL,
+  `to_user_id` bigint NOT NULL,
+  `content` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL,
+  `is_read` tinyint(1) NOT NULL DEFAULT 0,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`) USING BTREE,
+  INDEX `idx_fm_pair`(`from_user_id` ASC, `to_user_id` ASC, `id` ASC) USING BTREE,
+  INDEX `idx_fm_to`(`to_user_id` ASC, `is_read` ASC) USING BTREE
+) ENGINE = InnoDB AUTO_INCREMENT = 2 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '同袍私信表' ROW_FORMAT = Dynamic;
+
+-- ----------------------------
+-- Records of friend_message
+-- ----------------------------
+
+-- ----------------------------
+-- Table structure for friend_request
+-- ----------------------------
+DROP TABLE IF EXISTS `friend_request`;
+CREATE TABLE `friend_request`  (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `from_user_id` bigint NOT NULL COMMENT '发起者',
+  `to_user_id` bigint NOT NULL COMMENT '接收者',
+  `message` varchar(120) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NULL DEFAULT NULL COMMENT '附言',
+  `status` varchar(16) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL DEFAULT 'pending' COMMENT 'pending/accepted/rejected',
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `handle_time` datetime NULL DEFAULT NULL,
+  PRIMARY KEY (`id`) USING BTREE,
+  INDEX `idx_fr_to`(`to_user_id` ASC, `status` ASC) USING BTREE,
+  INDEX `idx_fr_from`(`from_user_id` ASC, `status` ASC) USING BTREE
+) ENGINE = InnoDB AUTO_INCREMENT = 4 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '同袍结交帖表' ROW_FORMAT = Dynamic;
+
+-- ----------------------------
+-- Records of friend_request
+-- ----------------------------
+
+-- ----------------------------
+-- Table structure for friendship
+-- ----------------------------
+DROP TABLE IF EXISTS `friendship`;
+CREATE TABLE `friendship`  (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `user_id` bigint NOT NULL,
+  `friend_id` bigint NOT NULL,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`) USING BTREE,
+  UNIQUE INDEX `uk_friend_pair`(`user_id` ASC, `friend_id` ASC) USING BTREE,
+  INDEX `idx_fs_user`(`user_id` ASC) USING BTREE
+) ENGINE = InnoDB AUTO_INCREMENT = 7 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '同袍好友关系表' ROW_FORMAT = Dynamic;
+
+-- ----------------------------
+-- Records of friendship
+-- ----------------------------
 
 -- ----------------------------
 -- Table structure for gacha_log
@@ -288,6 +347,83 @@ INSERT INTO `task` VALUES (5, '修缮城防，补筑北门箭楼', 0, '内政', 
 INSERT INTO `task` VALUES (6, '核计本月军饷钱粮，造册上报', 1, '内政', 6);
 INSERT INTO `task` VALUES (7, '犒赏三军，设宴安抚新降之将', 0, '内政', 7);
 INSERT INTO `task` VALUES (8, '遣使赴江东，商议互市通商', 0, '外交', 8);
+
+-- ----------------------------
+-- Table structure for team_invite
+-- ----------------------------
+DROP TABLE IF EXISTS `team_invite`;
+CREATE TABLE `team_invite`  (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `room_id` bigint NOT NULL,
+  `from_user_id` bigint NOT NULL,
+  `to_user_id` bigint NOT NULL,
+  `status` varchar(16) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL DEFAULT 'pending' COMMENT 'pending/accepted/rejected',
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`) USING BTREE,
+  INDEX `idx_ti_to`(`to_user_id` ASC, `status` ASC) USING BTREE
+) ENGINE = InnoDB AUTO_INCREMENT = 4 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '联队邀请表' ROW_FORMAT = Dynamic;
+
+-- ----------------------------
+-- Records of team_invite
+-- ----------------------------
+
+-- ----------------------------
+-- Table structure for team_member
+-- ----------------------------
+DROP TABLE IF EXISTS `team_member`;
+CREATE TABLE `team_member`  (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `room_id` bigint NOT NULL,
+  `user_id` bigint NOT NULL,
+  `join_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`) USING BTREE,
+  UNIQUE INDEX `uk_team_member`(`room_id` ASC, `user_id` ASC) USING BTREE,
+  INDEX `idx_tm_user`(`user_id` ASC) USING BTREE
+) ENGINE = InnoDB AUTO_INCREMENT = 7 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '联队成员表' ROW_FORMAT = Dynamic;
+
+-- ----------------------------
+-- Records of team_member
+-- ----------------------------
+
+-- ----------------------------
+-- Table structure for team_message
+-- ----------------------------
+DROP TABLE IF EXISTS `team_message`;
+CREATE TABLE `team_message`  (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `room_id` bigint NOT NULL,
+  `user_id` bigint NULL DEFAULT NULL,
+  `username` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NULL DEFAULT NULL,
+  `content` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL,
+  `type` varchar(16) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL DEFAULT 'chat' COMMENT 'chat/system/report',
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`) USING BTREE,
+  INDEX `idx_tmsg_room`(`room_id` ASC, `id` ASC) USING BTREE
+) ENGINE = InnoDB AUTO_INCREMENT = 15 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '联队频道消息表' ROW_FORMAT = Dynamic;
+
+-- ----------------------------
+-- Records of team_message
+-- ----------------------------
+
+-- ----------------------------
+-- Table structure for team_room
+-- ----------------------------
+DROP TABLE IF EXISTS `team_room`;
+CREATE TABLE `team_room`  (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `code` varchar(12) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL COMMENT '房号（邀请码）',
+  `name` varchar(40) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL DEFAULT '同袍联队',
+  `leader_id` bigint NOT NULL COMMENT '房主',
+  `status` varchar(16) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL DEFAULT 'waiting' COMMENT 'waiting/playing/closed',
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `start_time` datetime NULL DEFAULT NULL,
+  PRIMARY KEY (`id`) USING BTREE,
+  UNIQUE INDEX `uk_team_code`(`code` ASC) USING BTREE
+) ENGINE = InnoDB AUTO_INCREMENT = 4 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '烽烟联队房间表' ROW_FORMAT = Dynamic;
+
+-- ----------------------------
+-- Records of team_room
+-- ----------------------------
 
 -- ----------------------------
 -- Table structure for user
