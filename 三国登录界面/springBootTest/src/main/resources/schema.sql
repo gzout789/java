@@ -81,3 +81,95 @@ CREATE TABLE IF NOT EXISTS `admin_user` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_admin_username` (`username`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='后台管理账号表';
+
+-- ============================================================
+-- 同袍系统：好友结交 / 私信往来 / 组队共入烽烟三国杀
+-- 全部 CREATE TABLE IF NOT EXISTS，老库重启时自动补齐，不影响已有数据
+-- ============================================================
+
+-- 结交帖（好友申请）
+CREATE TABLE IF NOT EXISTS `friend_request` (
+  `id`            BIGINT      NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `from_user_id`  BIGINT      NOT NULL                COMMENT '发起者',
+  `to_user_id`    BIGINT      NOT NULL                COMMENT '接收者',
+  `message`       VARCHAR(120) DEFAULT NULL           COMMENT '附言',
+  `status`        VARCHAR(16) NOT NULL DEFAULT 'pending' COMMENT 'pending/accepted/rejected',
+  `create_time`   DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `handle_time`   DATETIME    DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_fr_to` (`to_user_id`, `status`),
+  KEY `idx_fr_from` (`from_user_id`, `status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='同袍结交帖表';
+
+-- 好友关系（双向各存一条，便于单向查询）
+CREATE TABLE IF NOT EXISTS `friendship` (
+  `id`          BIGINT   NOT NULL AUTO_INCREMENT,
+  `user_id`     BIGINT   NOT NULL,
+  `friend_id`   BIGINT   NOT NULL,
+  `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_friend_pair` (`user_id`, `friend_id`),
+  KEY `idx_fs_user` (`user_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='同袍好友关系表';
+
+-- 私信
+CREATE TABLE IF NOT EXISTS `friend_message` (
+  `id`           BIGINT       NOT NULL AUTO_INCREMENT,
+  `from_user_id` BIGINT       NOT NULL,
+  `to_user_id`   BIGINT       NOT NULL,
+  `content`      VARCHAR(500) NOT NULL,
+  `is_read`      TINYINT(1)   NOT NULL DEFAULT 0,
+  `create_time`  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_fm_pair` (`from_user_id`, `to_user_id`, `id`),
+  KEY `idx_fm_to` (`to_user_id`, `is_read`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='同袍私信表';
+
+-- 组队房间
+CREATE TABLE IF NOT EXISTS `team_room` (
+  `id`          BIGINT      NOT NULL AUTO_INCREMENT,
+  `code`        VARCHAR(12) NOT NULL                COMMENT '房号（邀请码）',
+  `name`        VARCHAR(40) NOT NULL DEFAULT '同袍联队',
+  `leader_id`   BIGINT      NOT NULL                COMMENT '房主',
+  `status`      VARCHAR(16) NOT NULL DEFAULT 'waiting' COMMENT 'waiting/playing/closed',
+  `create_time` DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `start_time`  DATETIME    DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_team_code` (`code`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='烽烟联队房间表';
+
+-- 队员
+CREATE TABLE IF NOT EXISTS `team_member` (
+  `id`        BIGINT   NOT NULL AUTO_INCREMENT,
+  `room_id`   BIGINT   NOT NULL,
+  `user_id`   BIGINT   NOT NULL,
+  `join_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_team_member` (`room_id`, `user_id`),
+  KEY `idx_tm_user` (`user_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='联队成员表';
+
+-- 组队邀请
+CREATE TABLE IF NOT EXISTS `team_invite` (
+  `id`           BIGINT      NOT NULL AUTO_INCREMENT,
+  `room_id`      BIGINT      NOT NULL,
+  `from_user_id` BIGINT      NOT NULL,
+  `to_user_id`   BIGINT      NOT NULL,
+  `status`       VARCHAR(16) NOT NULL DEFAULT 'pending' COMMENT 'pending/accepted/rejected',
+  `create_time`  DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_ti_to` (`to_user_id`, `status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='联队邀请表';
+
+-- 房间频道（聊天 / 军令 / 战报）
+CREATE TABLE IF NOT EXISTS `team_message` (
+  `id`          BIGINT       NOT NULL AUTO_INCREMENT,
+  `room_id`     BIGINT       NOT NULL,
+  `user_id`     BIGINT       DEFAULT NULL,
+  `username`    VARCHAR(50)  DEFAULT NULL,
+  `content`     VARCHAR(500) NOT NULL,
+  `type`        VARCHAR(16)  NOT NULL DEFAULT 'chat' COMMENT 'chat/system/report',
+  `create_time` DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_tmsg_room` (`room_id`, `id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='联队频道消息表';

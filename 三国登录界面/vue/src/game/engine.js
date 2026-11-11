@@ -10,7 +10,7 @@
  * 拆分到 engine/ 下的 mixin 模块，经 Object.assign(Game.prototype, ...) 合并，
  * 方法与实例状态（this.state）关系不变，纯组织性重构，无运行时行为变化。
  */
-import { reactive, markRaw } from 'vue'
+import { reactive } from 'vue'
 import {
   ROLES, ROLE_SETUP,
   buildDeck, judgeResult, shuffle, cardName, suitSymbol
@@ -35,12 +35,7 @@ export class Game {
     this.playerName = opts.playerName || '你'
     this.speed = opts.speed || 620
     this.humanResolve = null // 兼容字段：由 _refreshHumanResolve() 维护，指向最新等待者
-    /* 必须 markRaw：Game 实例被组件放进 ref() 后会变成响应式代理，普通 Map 经代理
-       get() 返回的是「代理对象」，waitHuman 里的 slots.get(channel) === w 恒为 false，
-       等待槽永远删不掉 → hasWaiter() 恒真 → 看门狗每 25s 误触发一次。*/
-    this._waiters = markRaw(new Map()) // channel -> 等待队列，见 distance.js 的 waitHuman
-    this._pendingQueue = markRaw([]) // 响应询问队列，见 distance.js 的 pushPending
-    this._pendingToken = 0
+    this._waiters = new Map() // channel -> waiter，见 distance.js 的 waitHuman
     this.running = false
     this._lastProgress = 0 // 看门狗：最近一次回合推进的时间戳
     this._watchdogTimer = null
@@ -168,22 +163,17 @@ export class Game {
       const idle = Date.now() - this._lastProgress
       // 阈值给到 25s，早于 waitHuman 的 30s 超时，正常情况下 waitHuman 会先自愈。
       if (idle < 25000) return
-      /* 只自愈「等玩家回答」的槽位。'play' 是玩家自己的用兵阶段，出牌 / 选目标
-         本来就可以慢慢想，绝不能因为静置久了就被强行结算：旧实现会在玩家还没
-         点目标时把回合推进到收兵甚至下家，而 UI 的 selecting 是组件本地状态、
-         完全不知情，高亮座位还在却点了没反应，看起来就是「卡死 + 无法指定目标」。*/
-      if (this.hasWaiter('response') || this.hasWaiter('discard')) {
-        this.warn('对局疑似停滞，已自动跳过当前响应以恢复推进。')
-        this.resolveWait(null, 'response')
-        this.resolveWait(null, 'discard')
-      } else if (this.hasWaiter('play')) {
-        // 玩家仍在正常出牌：只重置计时，不结算任何等待，也不打告警
+      // 自愈：若仍有挂起的玩家等待，清空全部等待槽恢复推进。
+      // 用 hasWaiter() 而不是 humanResolve：后者只指向最新等待者，
+      // 旧的等待槽还挂着时它会是 null，导致看门狗误判「无需自愈」。
+      if (this.hasWaiter()) {
+        this.warn('对局疑似停滞，已自动跳过当前等待以恢复推进。')
+        this.resolveWait(null)
         this._lastProgress = Date.now()
-        return
       } else {
         this.warn('对局疑似停滞，请留意战报。')
+        this._lastProgress = Date.now()
       }
-      this._lastProgress = Date.now()
     }, 5000)
   }
 
@@ -334,15 +324,15 @@ export class Game {
         return flip
       }
       // 玩家询问改判
-      const tok = this.pushPending({
+      this.state.pending = {
         kind: 'judgeSwap',
         idx: s.idx,
         trapKey,
         oldCard: judgeCard,
         text: `${target.label} 的【${cardName(trapKey)}】判定中（${judgeCard.num}${suitSymbol(judgeCard.suit)}），是否打出手牌以【${sk.name}】改判？`
-      })
+      }
       const action = await this.waitHuman()
-      this.clearPending(tok)
+      this.state.pending = null
       if (action && action.type === 'judgeSwap') {
         const card = s.hand.find((c) => c.uid === action.cardUid)
         if (card) {
@@ -371,9 +361,9 @@ export class Game {
       for (const c of drop) this.dropCard(seat, c)
       this.log(`${seat.label} 弃置 ${over} 张手牌。`, 'sys')
     } else {
-      const tok = this.pushPending({ kind: 'discard', idx: seat.idx, need: over })
+      this.state.pending = { kind: 'discard', idx: seat.idx, need: over }
       await this.waitHuman('discard') // 独立槽，见 confirmDiscard
-      this.clearPending(tok)
+      this.state.pending = null
     }
   }
 }
