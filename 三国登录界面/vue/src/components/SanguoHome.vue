@@ -3,6 +3,7 @@ import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useTheme, spawnInkRipple, authHeaders } from '../composables/useTheme'
 import { heroImg, onHeroImgError } from '../composables/useHeroImg'
 import HeroDetailModal from './HeroDetailModal.vue'
+import StudyQuiz from './StudyQuiz.vue'
 
 const props = defineProps({
   user: { type: Object, required: true }
@@ -46,6 +47,7 @@ const VIEWS = [
   { key: 'heroes', label: '武将图鉴' },
   { key: 'recruit', label: '招募抽卡' },
   { key: 'study', label: '学识问道' },
+  { key: 'quiz', label: '考校学识' },
   { key: 'tasks', label: '军机要务' },
   { key: 'news', label: '烽火快报' }
 ]
@@ -431,6 +433,15 @@ const quiz = ref(null)
 const quizLoading = ref(false)
 const quizAnsweringId = ref(null) // 正在提交的题目 id
 const quizFeedback = ref(null) // { questionId, correct, reward, explanation }
+// 答题失败提示独立显示在本视图：拆分前借用的是招募页的 recruitMsg，
+// 玩家留在「考校学识」页时根本看不到，表现得像点了没反应。
+const quizMsg = ref('')
+let quizMsgTimer = null
+function flashQuizMsg(text) {
+  quizMsg.value = text
+  clearTimeout(quizMsgTimer)
+  quizMsgTimer = setTimeout(() => (quizMsg.value = ''), 2600)
+}
 
 // 学习卡片（三国历史知识小贴士，非题目，纯阅读）
 const studyCards = [
@@ -472,15 +483,15 @@ const quizQuestions = computed(() => (quiz.value && quiz.value.questions) || [])
 const quizAnswered = computed(() => (quiz.value ? quiz.value.answeredCount : 0))
 const quizEarned = computed(() => (quiz.value ? quiz.value.earned : 0))
 
-/** 提交答案：答对发军饷，回显对错与解析 */
-async function submitAnswer(q) {
-  if (quizAnsweringId.value || !pickedOf(q)) return
+/** 提交答案：choice 由 StudyQuiz.vue 随题目一起 emit 回来（组件内本地选中态） */
+async function submitAnswer(q, choice) {
+  if (quizAnsweringId.value || !choice) return
   quizAnsweringId.value = q.id
   try {
     const res = await fetch('/api/quiz/answer', {
       method: 'POST',
       headers: authHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ questionId: q.id, choice: pickedOf(q) })
+      body: JSON.stringify({ questionId: q.id, choice })
     })
     if (res.status === 401) {
       handleUnauthorized()
@@ -493,35 +504,18 @@ async function submitAnswer(q) {
       await loadQuiz()
       await loadRecruit()
     } else {
-      flashRecruitMsg(data.message || '答题未成')
+      flashQuizMsg(data.message || '答题未成')
     }
   } catch {
-    flashRecruitMsg('与军中失联，答题未成')
+    flashQuizMsg('与军中失联，答题未成')
   } finally {
     quizAnsweringId.value = null
   }
 }
 
-/** 取某题当前选中的选项字母 */
-function pickedOf(q) {
-  return q && q.picked ? q.picked : ''
-}
-
-function chooseOption(q, key) {
-  if (q.answered) return
-  q.picked = key
-}
-
-/** 提交后把选项回填为「对/错」高亮 */
-function optionClass(q, key) {
-  const fb = quizFeedback.value
-  const isThis = fb && fb.questionId === q.id
-  if (!isThis) return { chosen: q.picked === key }
-  return {
-    correct: key === fb.answer,
-    wrong: q.picked === key && key !== fb.answer
-  }
-}
+/* 选中态、选项高亮、闯关进度全部由 StudyQuiz.vue 本地管理：
+   组件内 deck 是题库快照，emit('submit', q, q.picked) 把题目与选项一并回传，
+   父组件不再需要 pickedOf / chooseOption / optionClass。 */
 
 /* ---------------- 退出 ---------------- */
 function handleLogout() {
@@ -825,13 +819,22 @@ onMounted(() => {
                 <span class="study-entry-label">题库总题</span>
               </div>
             </div>
-            <button
-              type="button"
-              class="study-entry-btn ink-ripple-host"
-              @click="goView('study'); ripple($event)"
-            >
-              研读史册，答题赚军饷
-            </button>
+            <div class="study-entry-btns">
+              <button
+                type="button"
+                class="study-entry-btn ink-ripple-host"
+                @click="goView('study'); ripple($event)"
+              >
+                研读史册
+              </button>
+              <button
+                type="button"
+                class="study-entry-btn secondary ink-ripple-host"
+                @click="goView('quiz'); ripple($event)"
+              >
+                考校学识 · 答题赚军饷
+              </button>
+            </div>
           </section>
         </div>
       </template>
@@ -999,75 +1002,42 @@ onMounted(() => {
           </article>
         </div>
 
-        <!-- 答题得军饷 -->
-        <div class="study-head">
-          <h3 class="study-sub-title">✒️ 考校学识</h3>
-          <p class="study-sub-hint">
-            每题答对赏 <b>100 石</b>，已答 <b>{{ quizAnswered }}</b> 题、累计得军饷
-            <b>+{{ quizEarned }}</b> 石；同题不可重复得赏。
-          </p>
-        </div>
-
-        <p v-if="quizLoading" class="tip">书卷翻动中…</p>
-        <p v-else-if="!quizQuestions.length" class="tip">题库暂空，容军师稍后再备题</p>
-
-        <div v-else class="quiz-list">
-          <article
-            v-for="(q, qi) in quizQuestions"
-            :key="q.id"
-            class="quiz-item"
-            :class="{ done: q.answered, feedback: quizFeedback && quizFeedback.questionId === q.id }"
+        <!-- 考校学识已独立成一级视图（2026-11-11 拆分），这里只留引导入口 -->
+        <div class="study-foot">
+          <span>史册已读，何不考校一番？</span>
+          <button
+            type="button"
+            class="study-foot-btn ink-ripple-host"
+            @click="goView('quiz'); ripple($event)"
           >
-            <div class="quiz-q">
-              <span class="quiz-q-no">{{ qi + 1 }}</span>
-              <span class="quiz-q-text">{{ q.question }}</span>
-              <span v-if="q.category" class="quiz-q-cat">{{ q.category }}</span>
-            </div>
-
-            <div class="quiz-opts">
-              <button
-                v-for="opt in [{ k: 'A', v: q.optionA }, { k: 'B', v: q.optionB }, { k: 'C', v: q.optionC }, { k: 'D', v: q.optionD }]"
-                :key="opt.k"
-                type="button"
-                class="quiz-opt ink-ripple-host"
-                :class="optionClass(q, opt.k)"
-                :disabled="q.answered"
-                @click="chooseOption(q, opt.k); ripple($event)"
-              >
-                <span class="quiz-opt-key">{{ opt.k }}</span>
-                <span class="quiz-opt-val">{{ opt.v }}</span>
-              </button>
-            </div>
-
-            <!-- 反馈：答对/答错 + 解析 -->
-            <div v-if="quizFeedback && quizFeedback.questionId === q.id" class="quiz-feedback">
-              <div class="quiz-feedback-result" :class="{ ok: quizFeedback.correct }">
-                {{ quizFeedback.correct ? '✔ 答对' : '✘ 有误' }}
-                <template v-if="quizFeedback.reward"> · 赏军饷 +{{ quizFeedback.reward }} 石</template>
-              </div>
-              <p class="quiz-feedback-explain">
-                <b>正解 {{ quizFeedback.answer }}</b>：
-                {{ quizFeedback.explanation }}
-              </p>
-            </div>
-
-            <div v-if="q.answered && !(quizFeedback && quizFeedback.questionId === q.id)" class="quiz-done">
-              此题已答，赏银已入中军。
-            </div>
-
-            <div class="quiz-actions">
-              <button
-                v-if="!q.answered"
-                type="button"
-                class="quiz-submit ink-ripple-host"
-                :disabled="quizAnsweringId === q.id || !pickedOf(q)"
-                @click="submitAnswer(q); ripple($event)"
-              >
-                {{ quizAnsweringId === q.id ? '批阅中…' : '呈交答卷' }}
-              </button>
-            </div>
-          </article>
+            前往考校学识 →
+          </button>
         </div>
+      </section>
+
+      <!-- ========== 考校学识（独立视图） ========== -->
+      <section v-else-if="activeView === 'quiz'" class="card board study">
+        <div class="board-head">
+          <h2 class="card-title nomargin">考校学识</h2>
+          <div class="gold-box">
+            <span class="gold-label">军饷</span>
+            <span class="gold-num">{{ recruit ? recruit.gold : '—' }}</span>
+            <span class="gold-unit">石</span>
+            <span v-if="recruit && recruit.earned" class="gold-used">学识已补 +{{ recruit.earned }} 石</span>
+          </div>
+        </div>
+
+        <StudyQuiz
+          :questions="quizQuestions"
+          :loading="quizLoading"
+          :answering-id="quizAnsweringId"
+          :feedback="quizFeedback"
+          :answered-count="quizAnswered"
+          :earned="quizEarned"
+          :message="quizMsg"
+          @submit="submitAnswer"
+          @go-study="goView('study')"
+        />
       </section>
 
       <!-- ========== 军机要务 ========== -->
@@ -2886,6 +2856,54 @@ onMounted(() => {
   background: var(--gold);
   color: #0e1118;
 }
+/* 拆分后两个入口并排；窄屏改竖排（见末尾媒体查询） */
+.study-entry-btns {
+  display: flex;
+  gap: 10px;
+}
+.study-entry-btns .study-entry-btn {
+  flex: 1 1 0;
+  width: auto;
+  min-width: 0;
+}
+.study-entry-btn.secondary {
+  border-color: var(--hair);
+  color: var(--text-mute);
+  letter-spacing: 1px;
+}
+.study-entry-btn.secondary:hover {
+  background: var(--surface-2);
+  color: var(--gold-soft);
+}
+
+/* 学识问道页底部的跨视图引导 */
+.study-foot {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--hair-soft);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 12.5px;
+  color: var(--text-mute);
+}
+.study-foot-btn {
+  border: 1px solid var(--gold);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--gold-soft);
+  padding: 8px 18px;
+  font-size: 12.5px;
+  letter-spacing: 2px;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+}
+.study-foot-btn:hover {
+  background: var(--gold);
+  color: #0e1118;
+}
 
 /* 学识问道主视图 */
 .study-head {
@@ -2957,189 +2975,17 @@ onMounted(() => {
   color: var(--text-mute);
 }
 
-/* 答题列表 */
-.quiz-list {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-.quiz-item {
-  border: 1px solid var(--hair-soft);
-  border-radius: 10px;
-  padding: 14px 16px;
-  background: var(--surface-soft);
-  transition: border-color 0.2s;
-}
-.quiz-item.feedback {
-  border-color: var(--gold);
-}
-.quiz-item.done {
-  opacity: 0.82;
-}
-.quiz-q {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  margin-bottom: 12px;
-}
-.quiz-q-no {
-  flex: 0 0 auto;
-  width: 24px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--gold);
-  border-radius: 50%;
-  font-family: var(--font-cal);
-  font-size: 12px;
-  color: var(--gold-soft);
-}
-.quiz-q-text {
-  flex: 1;
-  font-size: 14.5px;
-  line-height: 1.6;
-  color: var(--text);
-}
-.quiz-q-cat {
-  flex: 0 0 auto;
-  font-size: 10px;
-  letter-spacing: 1px;
-  color: var(--text-faint);
-  border: 1px solid var(--hair-soft);
-  border-radius: 3px;
-  padding: 1px 6px;
-}
-
-.quiz-opts {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 8px;
-}
-.quiz-opt {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  text-align: left;
-  padding: 9px 12px;
-  border: 1px solid var(--hair-soft);
-  border-radius: 7px;
-  background: transparent;
-  color: var(--text);
-  cursor: pointer;
-  transition: border-color 0.15s, background 0.15s;
-}
-.quiz-opt:hover:not(:disabled) {
-  border-color: var(--gold);
-  background: var(--surface-2);
-}
-.quiz-opt:disabled {
-  cursor: default;
-}
-.quiz-opt-key {
-  flex: 0 0 auto;
-  width: 20px;
-  height: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--hair);
-  border-radius: 4px;
-  font-size: 11px;
-  color: var(--gold-soft);
-}
-.quiz-opt-val {
-  font-size: 13px;
-  line-height: 1.5;
-}
-.quiz-opt.chosen {
-  border-color: var(--gold);
-  background: var(--surface-2);
-}
-.quiz-opt.correct {
-  border-color: #3aa66a;
-  background: rgba(58, 166, 106, 0.14);
-}
-.quiz-opt.correct .quiz-opt-key {
-  border-color: #3aa66a;
-  color: #5fd58d;
-}
-.quiz-opt.wrong {
-  border-color: #d95f5f;
-  background: rgba(217, 95, 95, 0.14);
-}
-.quiz-opt.wrong .quiz-opt-key {
-  border-color: #d95f5f;
-  color: #ef8a8a;
-}
-
-.quiz-actions {
-  margin-top: 12px;
-  display: flex;
-  justify-content: flex-end;
-}
-.quiz-submit {
-  padding: 8px 22px;
-  border: 1px solid var(--gold);
-  border-radius: 7px;
-  background: transparent;
-  color: var(--gold-soft);
-  font-size: 13px;
-  letter-spacing: 3px;
-  cursor: pointer;
-  transition: background 0.2s, color 0.2s;
-}
-.quiz-submit:hover:not(:disabled) {
-  background: var(--gold);
-  color: #0e1118;
-}
-.quiz-submit:disabled {
-  cursor: not-allowed;
-  border-color: var(--hair-soft);
-  color: var(--text-ghost);
-}
-
-.quiz-feedback {
-  margin-top: 12px;
-  border: 1px solid var(--hair-soft);
-  border-left: 3px solid var(--gold);
-  border-radius: 7px;
-  padding: 10px 12px;
-  background: var(--surface-2);
-}
-.quiz-feedback-result {
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 1px;
-  color: #ef8a8a;
-}
-.quiz-feedback-result.ok {
-  color: #5fd58d;
-}
-.quiz-feedback-explain {
-  margin: 6px 0 0;
-  font-size: 12.5px;
-  line-height: 1.8;
-  color: var(--text-mute);
-}
-.quiz-feedback-explain b {
-  color: var(--gold-soft);
-}
-
-.quiz-done {
-  margin-top: 12px;
-  font-size: 12px;
-  letter-spacing: 1px;
-  color: var(--text-faint);
-}
+/* 答题区样式已随组件迁至 StudyQuiz.vue（2026-11-11 拆分）。
+   SanguoHome.vue 用的是 <style scoped>，组件内部 DOM 带的是自己的
+   data-v 属性，继承不到这里的规则，所以必须整段搬走而不是留一份。 */
 
 @media (max-width: 560px) {
-  .quiz-opts {
-    grid-template-columns: 1fr;
-  }
   .study-entry-stats {
     flex-direction: column;
     gap: 8px;
+  }
+  .study-entry-btns {
+    flex-direction: column;
   }
 }
 </style>

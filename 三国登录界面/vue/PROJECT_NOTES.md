@@ -22,7 +22,8 @@ src/game/
 
 ## 快速事实
 
-- 前端：Vue 3 + Vite，端口 5173，`vite.config.js` 中 `/api` 代理到 `http://localhost:8081`
+- 前端：Vue 3 + Vite，端口 5173，`vite.config.js` 中 `/api` 代理到 `http://127.0.0.1:8081`
+  （2026-11-11 由失效的 `192.168.55.1` 改来，别再写回旧局域网 IP）
 - 登录/注册对接真实后端（`src/components/SanguoLogin.vue` 的 `handleLogin` / `handleRegister`）
 - 登录成功后后端返回 JWT，存在 `sessionStorage`（`src/composables/useTheme.js`），
   后续请求统一带 `Authorization: Bearer <token>`；后端 401 时自动退回登录页
@@ -31,8 +32,11 @@ src/game/
 - 一键启动：根目录 `..\一键启动.bat`（GBK）；一键停止：`..\一键停止.bat`
 - 依赖丢失时：`npm install --registry=https://mirrors.cloud.tencent.com/npm/`
   （本机 `registry.npmmirror.com` 与 npmjs 均不通，只有腾讯镜像通）
-- 视图：总览 / 英雄榜 / **点将台（招募）** / 军机要务 / 烽火快报，都在 `SanguoHome.vue` 里，
-  导航由 `VIEWS` 数组驱动
+- 视图：总览 / 武将图鉴 / 招募抽卡 / 学识问道（研读史册） / **考校学识** / 军机要务 /
+  烽火快报，都在 `SanguoHome.vue` 里，导航由 `VIEWS` 数组驱动
+  （2026-11-11：「考校学识」从学识问道页内的子区块独立成一级视图，
+  答题区拆为 `components/StudyQuiz.vue`；题库状态仍由 `SanguoHome.vue` 持有，
+  通过 props 传入、`@choose` / `@submit` / `@go-study` 回传）
 - 点将台：`loadRecruit()` 拉 `/api/recruit`，`doRecruit(hero)` 提交 `/api/recruit`；
   军饷、招募价、他阵营加价都由后端算，前端只展示（`gold < cost` 时按钮置灰「军饷不足」）
 - 武将立绘（2026-10-30 改，2026-11-02 再优化）：与后端 `hero.name` 一一对应，两级资源
@@ -102,5 +106,100 @@ src/game/
 自检截图：`.shots\game-*.png`（选将 / 牌桌暗色 / 牌桌亮色 / 结算），
 `heroes-new-4.jpg` 为 2026-10-30 补的 4 张立绘。
 
-—— 最后更新：2026-10-30（补齐 4 位武将立绘、立绘瘦身、牌桌改网格布局并做矮屏适配、
+## 烽烟三国杀「出牌无法指定目标 / 卡死」（2026-11-11 修复）
+
+现象：选牌后点高亮座位没反应，或点着点着回合莫名进了弃牌，界面像冻住。
+**根因三个独立问题叠在一起，都在引擎侧，不是 UI 按钮没绑事件**，排查时别在
+`GameSeat.vue` 的 `@click` 上白费时间：
+
+1. **Vue `reactive(Map)` 身份陷阱**
+   `SanguoGame.vue` 里 `game.value = createGame(...)`，`Game` 实例被 `ref` 包成响应式代理，
+   连带 `this._waiters` 这个普通 `Map` 也变成代理。`waitHuman()` 旧代码靠
+   `slots.get(channel) === w` 判断并删除等待槽，代理下 `get()` 返回的是代理对象，
+   比较恒为 `false` → 槽永远删不掉 → `hasWaiter()` 恒真 → 看门狗每 25s 误报一次停滞，
+   `_waiters` 一路泄漏（诊断脚本实测三局残留 3/2/3）。
+   修法：`engine.js` 里 `this._waiters = markRaw(new Map())`、
+   `this._pendingQueue = markRaw([])`；`distance.js` 的 `waitHuman()` 改成
+   **每 channel 一个 FIFO 队列**，删除时用 `w.queue.indexOf(w)` 定位，不再做对象身份比较。
+
+2. **看门狗 / 30s 超时把玩家「用兵」阶段强杀了**（这是「无法指定目标」的直接原因）
+   旧 `waitHuman('play')` 也带 30s 超时，看门狗 25s 一到就 `resolveWait(null)`
+   把 `'play'` 结算掉，回合偷偷推进到 `discard`；但 `selecting` 是组件本地状态，
+   仍显示高亮座位，此时点座位已没有合法回合上下文 → 看起来就是「点了没用 + 卡死」。
+   修法：`'play'` 通道不设超时；看门狗遇到 `hasWaiter('play')` 只重置
+   `_lastProgress` 并 `return`，绝不结算等待。静置 27s 实测 `stage` 始终停在 `play`。
+
+3. **多条 fire-and-forget 异步链互相清空 `state.pending`**
+   出牌是「发射后不管」的异步链，响应询问可能与主循环询问并存；旧代码链尾直接
+   `this.state.pending = null`，会抹掉另一条链刚弹出的询问，玩家看不到按钮但链还在等。
+   修法：`distance.js` 新增 `pushPending() / clearPending(token) / clearAllPending()`
+   token 队列，`engine.js` / `combat.js` / `damage.js` 所有玩家询问点统一改成
+   ```js
+   const tok = this.pushPending({ ... })
+   const action = await this.waitHuman()
+   this.clearPending(tok)
+   ```
+   胜负结算与 `destroy()` 调 `clearAllPending()`。UI 侧配套：`watch(pending)` 清掉
+   `selecting / selectedUid / skillMenu`，`onSeatClick` 加「响应优先 + 回合守卫」
+   （`myTurn && st.stage === 'play'`），footer 给选目标态一个「取消选目标」入口，
+   出牌统一走 `fireUseCard()` 兜住 Promise rejection。
+
+**改引擎交互后必跑这三项验收，别只靠肉眼看牌桌**：
+- `node game-smoke.mjs`：3/3 局完整打完（本次结果 `SMOKE_EXIT=0`）
+- 临时诊断脚本复现选牌→选目标链路：`_waiters` 全程 0 泄漏、多目标分支真的被触发
+- 静置 27s：玩家回合不被强推（`结论: 玩家回合被强制结束 = false`）
+- 收尾 `npm run build`（本次 `41 modules transformed` / `EXIT=0`）
+
+## 「考校学识」独立成一级视图（2026-11-11）
+
+- 原来：答题得军饷那一块（题库 / 选项 / 提交 / 正解解析）和「📖 研读史册」的 4 张
+  静态学习卡挤在 `activeView === 'study'` 同一个 `<section>` 里。
+- 现在：`VIEWS` 新增 `{ key: 'quiz', label: '考校学识' }`，成为顶部导航独立一项；
+  `study` 视图只留研读史册 + 底部「前往考校学识」引导；两个视图互相有入口，
+  总览的 `study-entry` 卡片也拆成「研读史册」「考校学识 · 答题赚军饷」两个按钮。
+- 组件：`src/components/StudyQuiz.vue`。**题库状态与提交逻辑仍留在 `SanguoHome.vue`**
+  （`quiz` / `quizFeedback` / `submitAnswer` / `chooseOption`），组件只负责渲染，
+  通过 props 收数据、`@choose` / `@submit` / `@go-study` 回传动作 —— 保持单一数据源，
+  总览页的 `quizAnswered` / `quizEarned` / `quizQuestions.length` 统计一行都不用改。
+- **坑：`SanguoHome.vue` 是 `<style scoped>`**，组件内部 DOM 带的是自己的
+  `data-v-*` 属性，父组件的 `.quiz-*` 规则一条都继承不到。所以 `.quiz-list` 到
+  `.quiz-done` 整段 CSS 必须**连同样式一起搬进 `StudyQuiz.vue`**，不能只在父组件留着。
+  好处是主题色全走 `global.css` 的 CSS 变量（`--gold` / `--surface-2` 等），
+  明暗主题无需额外覆盖；`.ink-ripple-host` 也是全局的，水墨波纹照常生效。
+- 答题失败提示原先用招募页的 `recruitMsg`（`flashRecruitMsg`），玩家留在答题页时
+  根本看不到，表现得像点了没反应。现改为独立的 `quizMsg` + `flashQuizMsg`，在本视图内显示。
+- 收尾跑 `npm run build`（本次 43 modules / `EXIT=0`）。
+
+## 「考校学识」改为一题一屏闯关（2026-11-11 再改）
+
+用户否决了「一页列出全部题目 + 逐题点呈交答卷」的列表式，改成一次只出一题：
+选 → 呈交答卷 → 立即显示对错 / 正解 / 解析 → 「下一题」；顶部进度条 + 第 X/N 题，
+答完进总结页（本轮答对 / 题数 / 军饷），可「再考一轮」；全答对显示「群题尽破」，
+可「温习全部题目（不计赏）」。答错给「再答一次」（后端答错不落库，可反复试）。
+
+**关键设计（改答题流程前务必先读）**：
+- `StudyQuiz.vue` 内 `deck` 是题库的**一次性浅拷贝快照**，选中态 `q.picked`、
+  `index` / `stage` / `results` 全在组件内。原因：父组件 `submitAnswer` 成功后会
+  `await loadQuiz()` 刷新 `questions`，若直接渲染 `props.questions`，当前题对象会被
+  换掉、选中态与进度全丢。**绝不要改回直接用 props.questions 渲染。**
+- 父组件只管网络：`submitAnswer(q, choice)`，组件 `emit('submit', q, q.picked)`
+  把选项一并回传；`pickedOf` / `chooseOption` / `optionClass` 已全删，
+  `defineEmits` 只剩 `submit` / `go-study`。
+- 后端语义（`QuizServiceImpl`）：`board()` 的 `answered` **只在答对时为 true**，
+  答错不写 `quiz_earning`、可重答；`answer()` 对已答对题返回 `repeat: true, reward: 0`。
+  所以闯关队列默认只收 `!answered` 的题；`buildDeck()` 还用本地 `results` 里已答对的
+  id 再排除一次，防止 `loadQuiz()` 没刷新完就点「再考一轮」把刚答对的题排回来。
+- 反馈显示用组件内 `shown` 快照（watch `props.feedback` 复制），不直接渲染
+  `props.feedback`，避免切视图重建后残留反馈串到新题。
+- `stage` 四态：`answering | feedback | summary | cleared`；进度在 feedback/summary
+  时按 `index + 1` 算，最后一题提交后即 100%。
+
+验收：`npm run build` 43 modules / `EXIT=0`；另做状态机自检
+（选 → 提交 → 反馈 → 重答 → 下一题 → 总结 → 再考一轮 → 通关 → 温习）
+**29/29 断言通过**。以后改答题流程，先跑状态机断言再 build。
+
+—— 最后更新：2026-11-11（考校学识改为一题一屏闯关；此前同日已独立成一级视图并抽出
+`StudyQuiz.vue`；另修复烽烟三国杀出牌卡死：markRaw 等待槽 + FIFO 队列、
+`'play'` 免超时与看门狗放行、pending token 队列；`/api` 代理改回 127.0.0.1）
+上次：2026-10-30（补齐 4 位武将立绘、立绘瘦身、牌桌改网格布局并做矮屏适配、
 技能区改单行横排根除高技能武将座位溢出）

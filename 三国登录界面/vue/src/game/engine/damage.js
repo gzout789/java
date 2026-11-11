@@ -117,14 +117,14 @@ export const damageMethods = {
           return true
         }
       } else {
-        this.state.pending = {
+        const tok = this.pushPending({
           kind: 'save',
           idx: saver.idx,
           allowRed: this.hasEffect(saver, 'dying_heal_red'),
           text: `${target.label} 濒死，你是否出【援】相救？`
-        }
+        })
         const action = await this.waitHuman()
-        this.state.pending = null
+        this.clearPending(tok)
         if (action && action.type === 'save') {
           const card = saver.hand.find((c) => c.uid === action.cardUid)
           if (card) {
@@ -221,6 +221,8 @@ export const damageMethods = {
       this.state.winner = winner
       this.state.phase = 'over'
       this.log(`战事终结：${winner.text}。你${win ? '得胜' : '败北'}。`, win ? 'good' : 'death')
+      // 胜负已分：清掉残留的响应询问并唤醒全部等待，避免结算界面还挂着旧按钮
+      this.clearAllPending()
       this.resolveWait(null)
     }
     return winner
