@@ -105,6 +105,17 @@ function toast(text) {
   toastTimer = setTimeout(() => (toastText.value = ''), 2200)
 }
 
+/* 出牌是「发射后不管」的异步链：引擎内部可能正等玩家响应，UI 绝不能 await，
+   否则整个交互会被挂住。但仍要兜住异常，避免 unhandledrejection 静默发生。 */
+function fireUseCard(card, targetIdx, as) {
+  const g = game.value
+  if (!g || !me.value) return
+  Promise.resolve(g.useCard(me.value, card, targetIdx, as)).catch((e) => {
+    console.error('[烽烟三国杀] 出牌结算异常', e)
+    toast('出牌结算异常，请查看控制台')
+  })
+}
+
 /* ==================== 手牌操作 ==================== */
 
 function onHandCard(card) {
@@ -137,6 +148,8 @@ function onHandCard(card) {
 
   if (!myTurn.value || st.value.stage !== 'play') return
   selectedUid.value = selectedUid.value === card.uid ? null : card.uid
+  // 换牌 / 取消选牌后，旧的选目标态必须作废，否则高亮座位会指向另一张牌
+  selecting.value = null
 }
 
 /** 该牌可以当什么用 */
@@ -159,7 +172,7 @@ function playSelected(asKey) {
   const as = key === card.key ? undefined : key
 
   if (isEquip(key)) {
-    g.useCard(me.value, card, 0)
+    fireUseCard(card, 0)
     selectedUid.value = null
     return
   }
@@ -182,7 +195,7 @@ function playSelected(asKey) {
     return
   }
   if (cands.length === 1) {
-    g.useCard(me.value, card, cands[0], as)
+    fireUseCard(card, cands[0], as)
     selectedUid.value = null
     return
   }
@@ -199,15 +212,24 @@ function cancelSelect() {
 function onSeatClick(seat) {
   const g = game.value
   if (!g) return
+  // 响应询问优先：此时点座位不应再触发出牌，避免两条异步链同时弹询问
+  if (pending.value && pending.value.idx === 0) return
+  // 只在自己用兵阶段允许指定目标，回合一旦被推进就立刻收掉选目标态
+  const canTarget = myTurn.value && st.value.stage === 'play'
   if (selecting.value && selecting.value.candidates.includes(seat.idx)) {
+    if (!canTarget) {
+      cancelSelect()
+      return
+    }
     const { card, as } = selecting.value
     selecting.value = null
     selectedUid.value = null
-    g.useCard(me.value, card, seat.idx, as)
+    fireUseCard(card, seat.idx, as)
     return
   }
   const m = skillMode.value
   if (m && m.need === 'target') {
+    if (!canTarget) return
     if (!seat.alive) return
     if (seat.idx === 0 && !m.self) return
     if (m.eff === 'secret_unblockable' && !g.inReach(me.value, seat)) {
@@ -469,6 +491,17 @@ const canAct = computed(() => {
   return false
 })
 
+/* 响应询问一出现就收掉选目标/技能态。selecting 是组件本地状态，引擎弹出
+   挡 / 救 / 缓策询问时并不知情；旧实现里高亮座位会和响应按钮同时存在，
+   玩家点座位没有反应，很像「卡死 / 无法指定目标」。 */
+watch(pending, (p) => {
+  if (!p) return
+  selecting.value = null
+  selectedUid.value = null
+  skillMenu.value = false
+  if (p.kind !== 'discard') skillMode.value = null
+})
+
 /* ==================== 日志滚动 ==================== */
 
 watch(
@@ -653,23 +686,14 @@ function seatClass(idx) {
           <span class="a-tip">点击手牌以响应</span>
         </template>
 
-        <!-- 技能菜单（多技能武将） -->
-        <div v-if="skillMenu && myTurn && st.stage === 'play' && !selectedCard && !(pending && pending.idx === 0)" class="skill-menu">
-          <button
-            v-for="s in myActives"
-            :key="s.name"
-            type="button"
-            class="sm-item"
-            :title="s.allusion ? s.desc + '\n【典故】' + s.allusion : s.desc"
-            @click="triggerSkill(s.effect)"
-          >
-            <span class="sm-name">{{ s.name }}</span>
-            <span class="sm-type">{{ s.type }}</span>
-          </button>
-        </div>
+        <!-- 正在指定出牌目标：给一个明确的取消入口，别让玩家对着高亮座位干瞪眼 -->
+        <template v-else-if="selecting">
+          <button type="button" class="a-btn ghost" @click="cancelSelect()">取消选目标</button>
+          <span class="a-tip">点击牌桌上高亮的座位指定目标</span>
+        </template>
 
         <!-- 选中手牌后的可用动作（响应询问期间不出，避免抢答覆盖 state.pending） -->
-        <template v-else-if="selectedCard && !(pending && pending.idx === 0)">
+        <template v-else-if="selectedCard && myTurn && st.stage === 'play'">
           <button
             v-for="opt in cardOptions"
             :key="opt.key"
@@ -683,7 +707,7 @@ function seatClass(idx) {
         </template>
 
         <!-- 出牌阶段常规操作（有响应询问时先答题，否则点「收兵」会顶掉 pending） -->
-        <template v-else-if="myTurn && st.stage === 'play' && !(pending && pending.idx === 0)">
+        <template v-else-if="myTurn && st.stage === 'play'">
           <button
             v-if="myActives.length === 1"
             type="button"
@@ -718,6 +742,26 @@ function seatClass(idx) {
         </template>
 
         <span class="a-tip" v-else>静观其变…</span>
+
+        <!-- 技能菜单是独立浮层，必须放在 v-if/v-else-if 链尾：
+             若用 v-if 插在链中间，后面的 v-else-if 会挂到它上面，
+             响应按钮和「静观其变…」就会同时出现。 -->
+        <div
+          v-if="skillMenu && myTurn && st.stage === 'play' && !selectedCard && !selecting && !(pending && pending.idx === 0)"
+          class="skill-menu"
+        >
+          <button
+            v-for="s in myActives"
+            :key="s.name"
+            type="button"
+            class="sm-item"
+            :title="s.allusion ? s.desc + '\n【典故】' + s.allusion : s.desc"
+            @click="triggerSkill(s.effect)"
+          >
+            <span class="sm-name">{{ s.name }}</span>
+            <span class="sm-type">{{ s.type }}</span>
+          </button>
+        </div>
       </div>
 
       <div class="hand-row">

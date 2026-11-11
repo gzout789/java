@@ -186,14 +186,14 @@ export const combatMethods = {
       if (pick) this.removeHand(target, pick)
       return pick
     }
-    this.state.pending = {
+    const tok = this.pushPending({
       kind: 'dodge',
       idx: target.idx,
       from: source.idx,
       text: `${source.label} 对你使用【击】，是否出【挡】？`
-    }
+    })
     const action = await this.waitHuman()
-    this.state.pending = null
+    this.clearPending(tok)
     if (action && action.type === 'dodge') {
       const card = target.hand.find((c) => c.uid === action.cardUid)
       if (card) {
@@ -263,13 +263,13 @@ export const combatMethods = {
         if (turn.isAI) {
           played = slash // 对决中 AI 只要能出就出
         } else {
-          this.state.pending = {
+          const tok = this.pushPending({
             kind: 'duel',
             idx: turn.idx,
             text: `惑敌未决：是否出一张【击】？不出则受 1 点创伤。`
-          }
+          })
           const action = await this.waitHuman()
-          this.state.pending = null
+          this.clearPending(tok)
           if (action && action.type === 'duelSlash') {
             played = turn.hand.find((c) => c.uid === action.cardUid)
           }
@@ -306,13 +306,13 @@ export const combatMethods = {
         }
       } else {
         const harmful = target && target.idx === seat.idx
-        this.state.pending = {
+        const tok = this.pushPending({
           kind: 'negate',
           idx: seat.idx,
           text: `${user.label} 使用【${CARDS[schemeKey].name}】${harmful ? '指向你' : ''}，是否以【缓策】化解？`
-        }
+        })
         const action = await this.waitHuman()
-        this.state.pending = null
+        this.clearPending(tok)
         if (action && action.type === 'negate') {
           const card = seat.hand.find((c) => c.uid === action.cardUid)
           if (card) {

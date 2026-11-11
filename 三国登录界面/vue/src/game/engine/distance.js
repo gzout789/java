@@ -1,6 +1,7 @@
 /**
  * 距离计算、目标筛选、玩家交互通道、日志等杂项（Game 的方法 mixin）
  */
+import { markRaw } from 'vue'
 import { EQUIPS } from '../rules.js'
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms))
@@ -73,50 +74,61 @@ export const distanceMethods = {
    * 它会和主循环的等待同时存在：例如玩家自己用兵时一记【击】把 AI 打濒死，
    * 「是否出【援】相救」在出牌链里弹出，而主循环此刻还在等「收兵」。
    *
-   * 旧实现全局只有一个 humanResolve + 递增 token：新等待一挂起，旧等待的
-   * resolve 就被 token 校验永久作废（连 30s 超时都救不回来），整局卡死。
-   * 现按用途分槽，互不覆盖：
-   *   'play'     主循环等「收兵」
+   * 按用途分槽，互不覆盖：
+   *   'play'     主循环等「收兵」（玩家正常出牌阶段，不设超时）
    *   'discard'  收兵阶段等「确定弃牌」
    *   'response' 各类响应询问（挡 / 救 / 缓策 / 改判 / 惑敌）
-   * resolveWait 不传 channel 时清空所有槽，供胜负已分、退出、看门狗兜底。
+   * 每槽是 FIFO 队列而非单个等待者：同槽并发时排队结算，不会互相顶掉。
+   * _waiters 由构造函数 markRaw，避免经 reactive 代理后 get() 返回代理对象，
+   * 导致 `slots.get(channel) === w` 恒 false、等待槽永远删不掉。
    */
   waitHuman(channel = 'response') {
-    const slots = this._waiters || (this._waiters = new Map())
-    // 同槽重复等待属异常：先按「放弃」结算旧链，绝不留下永久挂起的 Promise
-    const prev = slots.get(channel)
-    if (prev) prev.done(null)
+    const slots = this._waiters || (this._waiters = markRaw(new Map()))
+    let queue = slots.get(channel)
+    if (!queue) { queue = []; slots.set(channel, queue) }
 
     return new Promise((resolve) => {
-      const w = { channel, settled: false, timer: null, done: null }
+      const w = { channel, settled: false, timer: null, done: null, queue }
       const done = (action) => {
         if (w.settled) return
         w.settled = true
         if (w.timer) { clearTimeout(w.timer); w.timer = null }
-        if (slots.get(channel) === w) slots.delete(channel)
+        const i = w.queue.indexOf(w)
+        if (i >= 0) w.queue.splice(i, 1)
+        if (!w.queue.length) slots.delete(channel)
         this._refreshHumanResolve()
         resolve(action)
       }
       w.done = done
-      slots.set(channel, w)
+      queue.push(w)
       this._refreshHumanResolve()
-      // 每个等待独立 30s 超时，超时按「跳过」结算，不让任何一条链永久挂起
-      w.timer = setTimeout(() => done(null), 30000)
+      /* 只有「等回答」的槽才设 30s 超时。'play' 是玩家自己的用兵阶段，
+         出牌 / 选目标可以慢慢想：给它加超时会在玩家还没点目标时就把回合
+         强行推进，UI 的选目标高亮态却还留着，表现为「卡死 / 无法指定目标」。*/
+      if (channel !== 'play') w.timer = setTimeout(() => done(null), 30000)
     })
   },
 
   /** 兼容旧字段：始终指向当前最新的存活等待者（没有则为 null） */
   _refreshHumanResolve() {
     const slots = this._waiters
-    const list = slots && slots.size ? Array.from(slots.values()) : []
-    this.humanResolve = list.length ? list[list.length - 1].done : null
+    let last = null
+    if (slots && slots.size) {
+      for (const q of slots.values()) if (q.length) last = q[q.length - 1]
+    }
+    this.humanResolve = last ? last.done : null
   },
 
   /** 是否有等待中的玩家操作（看门狗用） */
   hasWaiter(channel) {
     const slots = this._waiters
     if (!slots || !slots.size) return false
-    return channel ? slots.has(channel) : true
+    if (channel) {
+      const q = slots.get(channel)
+      return !!(q && q.length)
+    }
+    for (const q of slots.values()) if (q.length) return true
+    return false
   },
 
   /**
@@ -128,11 +140,47 @@ export const distanceMethods = {
     const slots = this._waiters
     if (!slots || !slots.size) return
     if (channel) {
-      const w = slots.get(channel)
-      if (w) w.done(action)
+      const q = slots.get(channel)
+      // 只结算队首（即当前显示的那条询问），与 pushPending 的队列一一对应
+      if (q && q.length) q[0].done(action)
       return
     }
-    for (const w of Array.from(slots.values())) w.done(action)
+    for (const [, q] of Array.from(slots.entries())) {
+      for (const w of q.slice()) w.done(action)
+    }
+  },
+
+  /* ==================== 响应询问队列 ====================
+   * state.pending 只有一个槽，但出牌是「发射后不管」的异步链，可能与主循环的
+   * 询问并存。旧写法在链尾直接 state.pending = null，会把另一条链刚弹出的
+   * 询问抹掉：玩家看不到按钮，链却还在等，界面就像卡死。
+   * 给每条询问发 token，只清自己的；排队后 state.pending 始终显示队首那条，
+   * 与 waitHuman 的 FIFO 队列顺序一致。
+   */
+  pushPending(pending) {
+    const q = this._pendingQueue || (this._pendingQueue = markRaw([]))
+    const token = ++this._pendingToken
+    pending.ptok = token
+    q.push({ token, pending })
+    if (!this.state.pending) this.state.pending = pending
+    return token
+  },
+
+  clearPending(token) {
+    const q = this._pendingQueue
+    if (!q || !q.length) return
+    const i = q.findIndex((x) => x.token === token)
+    if (i < 0) return
+    const shown = this.state.pending
+    const wasShown = shown && shown.ptok === token
+    q.splice(i, 1)
+    if (wasShown || !shown) this.state.pending = q.length ? q[0].pending : null
+  },
+
+  clearAllPending() {
+    if (this._pendingQueue) this._pendingQueue.length = 0
+    this._pendingToken = 0
+    this.state.pending = null
   },
 
   /** 玩家点出牌响应（挡 / 救 / 缓策 / 改判 / 惑敌 / 跳过） */
@@ -179,10 +227,11 @@ export const distanceMethods = {
     if (this.state.phase === 'playing') this.checkWin()
   },
 
-  /** 退出游戏（清理看门狗与全部异步等待，避免旧局残留推进） */
+  /** 退出游戏（清理看门狗、询问队列与全部异步等待，避免旧局残留推进） */
   destroy() {
     this.running = false
     if (this._watchdogTimer) { clearInterval(this._watchdogTimer); this._watchdogTimer = null }
+    this.clearAllPending()
     this.resolveWait(null)
   },
 }

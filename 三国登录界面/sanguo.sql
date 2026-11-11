@@ -1,17 +1,17 @@
 /*
  Navicat Premium Dump SQL
 
- Source Server         : localhost_3306
+ Source Server         : huj
  Source Server Type    : MySQL
- Source Server Version : 80039 (8.0.39)
+ Source Server Version : 80408 (8.4.8)
  Source Host           : localhost:3306
  Source Schema         : sanguo
 
  Target Server Type    : MySQL
- Target Server Version : 80039 (8.0.39)
+ Target Server Version : 80408 (8.4.8)
  File Encoding         : 65001
 
- Date: 09/11/2026 09:59:24
+ Date: 11/11/2026 13:28:29
 */
 
 SET NAMES utf8mb4;
@@ -36,7 +36,7 @@ CREATE TABLE `admin_user`  (
 -- ----------------------------
 -- Records of admin_user
 -- ----------------------------
-INSERT INTO `admin_user` VALUES (1, '管理员', '$2a$10$cqBRwa3gnqQt/NZLtBuNW./g32EcAqTWO/PiCn7ozNf2G7ggMhRTK', 'admin', '内置管理员', '2026-11-09 09:35:26', '2026-10-23 14:16:19');
+INSERT INTO `admin_user` VALUES (1, '管理员', '$2a$10$cqBRwa3gnqQt/NZLtBuNW./g32EcAqTWO/PiCn7ozNf2G7ggMhRTK', 'admin', '内置管理员', '2026-11-11 13:26:13', '2026-10-23 14:16:19');
 
 -- ----------------------------
 -- Table structure for gacha_log
@@ -158,7 +158,7 @@ CREATE TABLE `quiz_earning`  (
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE INDEX `uk_user_question`(`user_id` ASC, `question_id` ASC) USING BTREE,
   INDEX `idx_quiz_user`(`user_id` ASC) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 11 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '答题军饷收益流水表' ROW_FORMAT = DYNAMIC;
+) ENGINE = InnoDB AUTO_INCREMENT = 24 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '答题军饷收益流水表' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Records of quiz_earning
@@ -173,6 +173,19 @@ INSERT INTO `quiz_earning` VALUES (7, 7, 4, 100, '2026-11-09 09:45:22');
 INSERT INTO `quiz_earning` VALUES (8, 7, 5, 100, '2026-11-09 09:45:37');
 INSERT INTO `quiz_earning` VALUES (9, 7, 6, 100, '2026-11-09 09:45:51');
 INSERT INTO `quiz_earning` VALUES (10, 7, 7, 100, '2026-11-09 09:46:04');
+INSERT INTO `quiz_earning` VALUES (11, 1, 4, 100, '2026-11-11 13:09:07');
+INSERT INTO `quiz_earning` VALUES (12, 1, 6, 100, '2026-11-11 13:23:57');
+INSERT INTO `quiz_earning` VALUES (13, 1, 7, 100, '2026-11-11 13:24:03');
+INSERT INTO `quiz_earning` VALUES (14, 1, 8, 100, '2026-11-11 13:24:08');
+INSERT INTO `quiz_earning` VALUES (15, 1, 9, 100, '2026-11-11 13:24:17');
+INSERT INTO `quiz_earning` VALUES (16, 1, 10, 100, '2026-11-11 13:24:23');
+INSERT INTO `quiz_earning` VALUES (17, 1, 11, 100, '2026-11-11 13:24:30');
+INSERT INTO `quiz_earning` VALUES (18, 1, 13, 100, '2026-11-11 13:24:42');
+INSERT INTO `quiz_earning` VALUES (19, 1, 14, 100, '2026-11-11 13:24:48');
+INSERT INTO `quiz_earning` VALUES (20, 1, 16, 100, '2026-11-11 13:25:00');
+INSERT INTO `quiz_earning` VALUES (21, 1, 17, 100, '2026-11-11 13:25:08');
+INSERT INTO `quiz_earning` VALUES (22, 1, 18, 100, '2026-11-11 13:25:13');
+INSERT INTO `quiz_earning` VALUES (23, 1, 19, 100, '2026-11-11 13:25:19');
 
 -- ----------------------------
 -- Table structure for quiz_question
@@ -300,6 +313,6 @@ INSERT INTO `user` VALUES (3, '子龙', '$2a$10$Znz0Lt89UnOiBpgBFG5o9.ganNoxeGaw
 INSERT INTO `user` VALUES (4, '孟德', '$2a$10$z4M8XjpIL.vF6OnQaNdoV.mIZurlToKumqELcvF0O.PALHCxwzfsm', 'wei', '2026-10-23 14:07:04', '2026-10-23 14:07:04');
 INSERT INTO `user` VALUES (5, '仲谋', '$2a$10$ja9r14mt2WMLE.AbDKZ08uT6MoEvR1LlyxqopbgcXClfPGdvmSqB2', 'wu', '2026-10-23 14:07:04', '2026-10-23 14:07:04');
 INSERT INTO `user` VALUES (6, '以德', '$2a$10$8NFmHhfEcFjusoY4DFBdz.DsHvJ4w6cRmAVLGEeP2OzjcveDo5XU.', 'han', '2026-11-02 09:55:04', '2026-11-02 09:55:04');
-INSERT INTO `user` VALUES (7, '我文', '$2a$10$LDaa5Rl7T6PeBeB.9mNDxu6QJZhGmXkG/9DN/r1CPr/v/zxbFtPgu', 'han', '2026-11-09 09:19:33', '2026-11-09 09:19:33');
+INSERT INTO `user` VALUES (7, '我文', '$2a$10$LDaa5Rl7T6PeBeB.9mNDxu6QJZhGmXkG/9DN/r1CPr/v/zxbFtPgu', 'wu', '2026-11-09 09:19:33', '2026-11-11 13:26:52');
 
 SET FOREIGN_KEY_CHECKS = 1;
