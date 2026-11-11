@@ -123,7 +123,7 @@ export const damageMethods = {
           allowRed: this.hasEffect(saver, 'dying_heal_red'),
           text: `${target.label} 濒死，你是否出【援】相救？`
         })
-        const action = await this.waitHuman()
+        const action = await this.waitHuman('response', saver.idx)
         this.clearPending(tok)
         if (action && action.type === 'save') {
           const card = saver.hand.find((c) => c.uid === action.cardUid)
@@ -131,7 +131,7 @@ export const damageMethods = {
             this.removeHand(saver, card)
             this.state.discard.push(card)
             target.hp = 1
-            this.log(`你以【${card.key === 'heal' ? '援' : '刮骨'}】救下 ${target.label}，体力回到 1 点。`, 'good')
+            this.log(`${saver.label} 以【${card.key === 'heal' ? '援' : '刮骨'}】救下 ${target.label}，体力回到 1 点。`, 'good')
             return true
           }
         }
@@ -212,7 +212,8 @@ export const damageMethods = {
     }
 
     if (winner) {
-      const me = this.state.seats[0]
+      /* 联机时战报广播给全体同袍，胜负由每个席位在快照里按各自身份重算 */
+      const me = this.state.seats[this.mySeatIdx] || this.state.seats[0]
       const win =
         (winner.side === 'lord' && (me.role === 'lord' || me.role === 'loyal')) ||
         (winner.side === 'rebel' && me.role === 'rebel') ||
@@ -220,7 +221,9 @@ export const damageMethods = {
       winner.playerWin = win
       this.state.winner = winner
       this.state.phase = 'over'
-      this.log(`战事终结：${winner.text}。你${win ? '得胜' : '败北'}。`, win ? 'good' : 'death')
+      this.log(this.online
+        ? `战事终结：${winner.text}。`
+        : `战事终结：${winner.text}。你${win ? '得胜' : '败北'}。`, win ? 'good' : 'death')
       // 胜负已分：清掉残留的响应询问并唤醒全部等待，避免结算界面还挂着旧按钮
       this.clearAllPending()
       this.resolveWait(null)

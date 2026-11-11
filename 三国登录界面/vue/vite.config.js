@@ -13,6 +13,12 @@ export default defineConfig({
       '/api': {
         target: 'http://127.0.0.1:8081',
         changeOrigin: true
+      },
+      // 联机牌局：WebSocket 握手升级要显式开启，否则 Vite 只按普通 HTTP 转发
+      '/ws': {
+        target: 'http://127.0.0.1:8081',
+        changeOrigin: true,
+        ws: true
       }
     }
   }

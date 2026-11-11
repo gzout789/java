@@ -4,11 +4,12 @@ import { useTheme, spawnInkRipple, authHeaders } from '../composables/useTheme'
 import { heroImg, onHeroImgError } from '../composables/useHeroImg'
 import HeroDetailModal from './HeroDetailModal.vue'
 import StudyQuiz from './StudyQuiz.vue'
+import SocialPanel from './social/SocialPanel.vue'
 
 const props = defineProps({
   user: { type: Object, required: true }
 })
-const emit = defineEmits(['logout', 'open-admin', 'open-game'])
+const emit = defineEmits(['logout', 'open-admin', 'open-game', 'open-huimeng'])
 
 const { theme, toggleTheme } = useTheme()
 const ripple = spawnInkRipple
@@ -56,6 +57,15 @@ const activeView = ref('overview')
 
 function goView(key) {
   activeView.value = key
+}
+
+/* 同袍面板：结交、私信、组队；整队出征时把房号交给上层路由带入牌局 */
+const socialOpen = ref(false)
+const socialBadge = ref(0)
+
+function onEnterGame(code) {
+  socialOpen.value = false
+  emit('open-game', code || '')
 }
 
 function factionName(key) {
@@ -578,6 +588,20 @@ onMounted(() => {
           {{ v.label }}
         </button>
 
+        <!-- 同袍：好友 / 私信 / 组队 -->
+        <button
+          class="nav-item nav-social ink-ripple-host"
+          type="button"
+          title="结交同袍、私信往来、组队共入烽烟三国杀"
+          @click="socialOpen = true; ripple($event)"
+        >
+          <span class="nav-admin-icon" aria-hidden="true">✉</span>同袍
+          <i
+            v-if="socialBadge"
+            style="display:inline-grid;place-items:center;min-width:16px;height:16px;margin-left:4px;padding:0 4px;border-radius:999px;background:#b22222;color:#fff;font-size:10px;font-style:normal;line-height:16px"
+          >{{ socialBadge }}</i>
+        </button>
+
         <!-- 烽烟三国杀：进入牌局 -->
         <button
           class="nav-item nav-game ink-ripple-host"
@@ -586,6 +610,16 @@ onMounted(() => {
           @click="emit('open-game'); ripple($event)"
         >
           <span class="nav-admin-icon" aria-hidden="true">⚔</span>烽烟战场
+        </button>
+
+        <!-- 会盟讨董：竞速抢战功的第二模式 -->
+        <button
+          class="nav-item nav-huimeng ink-ripple-host"
+          type="button"
+          title="进入会盟讨董（关东诸侯竞速抢战功）"
+          @click="emit('open-huimeng'); ripple($event)"
+        >
+          <span class="nav-admin-icon" aria-hidden="true">盟</span>会盟讨董
         </button>
 
         <!-- 后台管理系统入口：进入独立的管理登录页 -->
@@ -1138,6 +1172,16 @@ onMounted(() => {
 
     <!-- ========== 武将详情弹窗（大图 + 技能） ========== -->
     <HeroDetailModal :hero="detailHero" @close="closeHeroDetail" />
+
+    <!-- ========== 同袍 · 联队抽屉 ========== -->
+    <SocialPanel
+      :user="user"
+      :open="socialOpen"
+      @close="socialOpen = false"
+      @enter-game="onEnterGame"
+      @unauthorized="handleUnauthorized"
+      @badge="socialBadge = $event"
+    />
 
     <footer class="footer">凭此印信，出入中军 · 点「退出大帐」可返回登录</footer>
   </div>
@@ -2987,5 +3031,24 @@ onMounted(() => {
   .study-entry-btns {
     flex-direction: column;
   }
+}
+
+/* 会盟讨董入口：金色描边，与烽烟战场的赤红、后台管理的暗金区分开 */
+.nav-item.nav-huimeng {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-left: 4px;
+  color: #c9a24a;
+  border-color: rgba(154, 111, 30, 0.55);
+  background: linear-gradient(180deg, rgba(212, 175, 55, 0.16), rgba(212, 175, 55, 0.04));
+  font-size: 14px;
+  letter-spacing: 2px;
+  padding: 8px 15px 8px 14px;
+}
+.nav-item.nav-huimeng:hover {
+  color: #f0d89a;
+  border-color: #c9a24a;
+  box-shadow: 0 6px 18px -8px rgba(201, 162, 74, 0.7);
 }
 </style>

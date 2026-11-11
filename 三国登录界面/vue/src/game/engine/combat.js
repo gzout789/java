@@ -192,7 +192,7 @@ export const combatMethods = {
       from: source.idx,
       text: `${source.label} 对你使用【击】，是否出【挡】？`
     })
-    const action = await this.waitHuman()
+    const action = await this.waitHuman('response', target.idx)
     this.clearPending(tok)
     if (action && action.type === 'dodge') {
       const card = target.hand.find((c) => c.uid === action.cardUid)
@@ -268,7 +268,7 @@ export const combatMethods = {
             idx: turn.idx,
             text: `惑敌未决：是否出一张【击】？不出则受 1 点创伤。`
           })
-          const action = await this.waitHuman()
+          const action = await this.waitHuman('response', turn.idx)
           this.clearPending(tok)
           if (action && action.type === 'duelSlash') {
             played = turn.hand.find((c) => c.uid === action.cardUid)
@@ -311,7 +311,7 @@ export const combatMethods = {
           idx: seat.idx,
           text: `${user.label} 使用【${CARDS[schemeKey].name}】${harmful ? '指向你' : ''}，是否以【缓策】化解？`
         })
-        const action = await this.waitHuman()
+        const action = await this.waitHuman('response', seat.idx)
         this.clearPending(tok)
         if (action && action.type === 'negate') {
           const card = seat.hand.find((c) => c.uid === action.cardUid)
