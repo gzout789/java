@@ -76,7 +76,22 @@ footer{margin-top:56px;text-align:center;font-size:12px;color:var(--ink-soft);bo
 <div class="intro">
   设计原则：<b>每个技能 = 一条可考的历史典故 + 一段可执行的结算逻辑</b>。
   技能标签沿用四类：【常策】锁定技 /【奇谋】主动技 /【应策】响应技 /【秘计】限定技（一局一次）。
-  全部描述均已规避原版名词，可直接作为自研代码的需求文档。
+  全部牌名均为自研命名（【击】【挡】【援】【缓策】……），已规避原版名词。
+</div>
+<div style="margin:18px 0 28px;padding:16px 20px;border:2px solid #a33;border-left-width:8px;border-radius:6px;background:#fff6f2;color:#3a2b22;font-size:13.5px;line-height:1.85">
+  <div style="font-size:16px;font-weight:700;letter-spacing:2px;color:#a33224;margin-bottom:8px">⚠ 本文不是需求文档 · 请以代码为准</div>
+  结算规则的<b>唯一真源是 <code>vue/src/game/rules.js</code></b>，完整约定见
+  <code>docs/规则真源与术语规范.md</code>；逐条校准后的文案见同目录
+  <code>烽烟三国杀-武将设定集(典故版).md</code>。本页为早期展示稿，仍保留部分旧措辞，<b>不得据此写实现或 AI 裁判提示词</b>。<br>
+  <b>关键差异（共 12 条，已在校准版 md 中订正）：</b>刘备【昭烈】是「手牌上限 +2」的常策，不是主公技；
+  【仁德】为弃 2 张交人、自己回 1 体力；周瑜【英姿】是<b>用兵阶段限一次摸 1 张</b>，不是征粮摸 3 张；
+  诸葛亮【观星】为弃 1 摸 1 并察牌顶 3 张（无排序），【空城】只免疫【击】与【探囊】，【七星】在体力 ≤1 时触发；
+  曹操【收编】只取手牌；关羽【单刀】无「濒死摸 2 张」；赵云【单骑救主】非濒死触发；
+  孙尚香【联姻】无额外摸牌；貂蝉【离间】无性别限制、无摸牌；陆逊【谦冲】另免疫【探囊】【困局】。<br>
+  <b>阵营只有 4 个 key：<code>han / wei / shu / wu</code></b>（汉室 / 曹魏 / 蜀汉 / 东吴）。
+  「群雄」是 <code>HERO_SKILLS</code> 的注释分组、<code>ROLES.rebel</code> 的身份名、
+  以及 <code>factionName()</code> 的兜底显示值，<b>都不是阵营 key</b>；下方卡片 CSS 类名沿用旧稿，
+  仅为配色，不表示势力归属。体力由 <code>defaultHp()</code> 动态推导，本页数字不可作为依据。
 </div>
 
 <h2>典故 → 机制 映射<span class="cnt">母题如何抽象成玩法</span></h2>
@@ -84,14 +99,14 @@ footer{margin-top:56px;text-align:center;font-size:12px;color:var(--ink-soft);bo
 <tr><th style="width:26%">典故母题</th><th style="width:32%">抽象出的机制</th><th>代表武将</th></tr>
 <tr><td>万军之中取上将首级</td><td>强攻不可挡 / 需双挡</td><td>关羽</td></tr>
 <tr><td>长坂坡七进七出</td><td>攻守互转（击 ↔ 挡）</td><td>赵云</td></tr>
-<tr><td>携民渡江、以德服人</td><td>给牌换收益、主公技</td><td>刘备</td></tr>
-<tr><td>空城抚琴、夜观天象</td><td>空手免疫 / 控牌顶</td><td>诸葛亮</td></tr>
+<tr><td>携民渡江、以德服人</td><td>给牌换回复 / 手牌上限 +2</td><td>刘备</td></tr>
+<tr><td>空城抚琴、夜观天象</td><td>空手免疫 / 察牌顶</td><td>诸葛亮</td></tr>
 <tr><td>收编降卒、挟天子令诸侯</td><td>夺牌、压制出牌权</td><td>曹操</td></tr>
 <tr><td>拔矢啖睛</td><td>受伤反噬</td><td>夏侯惇</td></tr>
 <tr><td>冢虎善谋、高平陵之变</td><td>改判定、阵亡收割</td><td>司马懿</td></tr>
 <tr><td>火烧赤壁、蒋干盗书</td><td>群体伤害、反间夺牌</td><td>周瑜</td></tr>
 <tr><td>孙刘联姻、弓腰姬</td><td>治疗换牌、失装备摸牌</td><td>孙尚香</td></tr>
-<tr><td>夷陵火烧连营、为人谦冲</td><td>延时削弱、计略抗性</td><td>陆逊</td></tr>
+<tr><td>夷陵火烧连营、为人谦冲</td><td>计略免疫、计略抗性</td><td>陆逊</td></tr>
 <tr><td>辕门射戟、人中吕布</td><td>破防强攻、全场立威</td><td>吕布</td></tr>
 <tr><td>连环美人计、闭月</td><td>强制互攻、回合结束过牌</td><td>貂蝉</td></tr>
 <tr><td>刮骨疗毒、青囊书</td><td>治疗、濒死救援</td><td>华佗</td></tr>
@@ -101,18 +116,18 @@ footer{margin-top:56px;text-align:center;font-size:12px;color:var(--ink-soft);bo
 <div class="grid">
 
   <div class="card han">
-    <div class="c-head"><span class="c-name">刘备<span class="tag">汉</span><span class="hp">5 体力（主公 +1）</span></span><span class="c-meta">辅助 / 续航</span></div>
+    <div class="c-head"><span class="c-name">刘备<span class="tag">汉</span><span class="hp">体力以英雄榜为准</span></span><span class="c-meta">辅助 / 续航</span></div>
     <div class="skill">
       <div class="skill-name">仁德<span class="skill-type">奇谋</span></div>
-      <div class="skill-when">出牌阶段，每阶段限一次</div>
-      <p class="skill-eff">你可以将任意数量的手牌交给一名其他角色；若一次性给出不少于 2 张，你回复 1 点体力。</p>
+      <div class="skill-when">用兵阶段，限一次（give_rende）</div>
+      <p class="skill-eff">弃两张手牌交给一名其他角色，你回复 1 点体力。</p>
       <div class="allusion"><b>典故</b>　建安十三年曹操南征，刘备"携民渡江"，日行十余里而不弃百姓（《三国志·先主传》）；又三让徐州，以仁德立身。散财而得人心，故"给牌"换"回血"。</div>
     </div>
     <div class="skill">
-      <div class="skill-name">昭烈<span class="skill-type">主公技·应策</span></div>
-      <div class="skill-when">其他汉势力角色的出牌阶段</div>
-      <p class="skill-eff">其他汉势力角色可以交给你一张手牌，然后该角色摸一张牌。</p>
-      <div class="allusion"><b>典故</b>　桃园结义、得人死力——关羽挂印封金、赵云长坂救主，皆因刘备能"得众心"。主公技象征汉室正统的号召力。</div>
+      <div class="skill-name">昭烈<span class="skill-type">常策</span></div>
+      <div class="skill-when">锁定技，永久生效（lord_support）</div>
+      <p class="skill-eff">你的手牌上限 +2（众人拥戴，粮草不绝）。</p>
+      <div class="allusion"><b>典故</b>　桃园结义、得人死力——关羽挂印封金、赵云长坂救主，皆因刘备能"得众心"。<b>旧稿误作主公技，代码中不存在该结算。</b></div>
     </div>
   </div>
 
@@ -153,13 +168,13 @@ footer{margin-top:56px;text-align:center;font-size:12px;color:var(--ink-soft);bo
     <div class="skill">
       <div class="skill-name">空城<span class="skill-type">常策</span></div>
       <div class="skill-when">锁定技，永久生效</div>
-      <p class="skill-eff">当你没有手牌时，你不能成为【击】与瞬发计略的目标。</p>
+      <p class="skill-eff">当你没有手牌时，你不能成为【击】与【探囊】的目标。</p>
       <div class="allusion"><b>典故</b>　街亭失守后，亮"凭栏而坐，焚香操琴"，司马懿疑有伏兵而退（演义第九十五回，本事见《三国志》裴松之注引"郭冲三事"）。空手而坐，无人敢攻。</div>
     </div>
     <div class="skill">
       <div class="skill-name">观星<span class="skill-type">奇谋</span></div>
       <div class="skill-when">出牌阶段限一次</div>
-      <p class="skill-eff">你可以观看牌堆顶的 3 张牌，然后以任意顺序放回牌堆顶或牌堆底。</p>
+      <p class="skill-eff">弃一张手牌，摸一张牌，并察牌堆顶三张以知天时（代码无排序能力）。</p>
       <div class="allusion"><b>典故</b>　"亮夜观天象"，借东风、草船借箭皆赖知天时；星象即牌堆——看得见的未来。</div>
     </div>
     <div class="skill">
@@ -223,15 +238,15 @@ footer{margin-top:56px;text-align:center;font-size:12px;color:var(--ink-soft);bo
   </div>
 </div>
 
-<h2>孙吴阵营<span class="cnt">爆发、装备、控场</span></h2>
+<h2>东吴阵营（key: wu）<span class="cnt">爆发、装备、控场</span></h2>
 <div class="grid">
 
   <div class="card wu">
     <div class="c-head"><span class="c-name">周瑜<span class="tag">吴</span><span class="hp">3 体力</span></span><span class="c-meta">爆发 / 群体伤害</span></div>
     <div class="skill">
       <div class="skill-name">英姿<span class="skill-type">奇谋</span></div>
-      <div class="skill-when">你的征粮阶段</div>
-      <p class="skill-eff">你摸牌时多摸一张（征粮阶段摸 3 张）。</p>
+      <div class="skill-when">用兵阶段限一次（draw1）</div>
+      <p class="skill-eff">你摸一张牌。<b>旧稿「征粮摸 3 张」与代码不符，已订正。</b></p>
       <div class="allusion"><b>典故</b>　"遥想公瑾当年，小乔初嫁了，雄姿英发，羽扇纶巾"——苏轼《念奴娇·赤壁怀古》。才俊从容，粮草自足。</div>
     </div>
     <div class="skill">
@@ -281,7 +296,7 @@ footer{margin-top:56px;text-align:center;font-size:12px;color:var(--ink-soft);bo
   </div>
 </div>
 
-<h2>群雄阵营<span class="cnt">极限强攻、操控、治疗</span></h2>
+<h2>群雄武将组（注释分组，非阵营 key）<span class="cnt">极限强攻、操控、治疗</span></h2>
 <div class="grid">
 
   <div class="card qun">
@@ -370,7 +385,7 @@ footer{margin-top:56px;text-align:center;font-size:12px;color:var(--ink-soft);bo
 <b>结算钩子（与六阶段回合对齐）：</b>
 <pre><code>on_round_start (启策) → 常策结算
 on_judge       (判定) → 鬼才等改判钩子
-on_draw        (征粮) → 英姿、断粮判定
+on_draw        (征粮) → 断粮判定（英姿属用兵阶段）
 on_play        (用兵) → 奇谋、应策主战场
 on_discard     (收兵) → 手牌上限 = 体力
 on_round_end   (收阵) → 闭月等收尾技
@@ -381,8 +396,8 @@ on_damage / on_dying / on_death
 <h2>可扩展方向<span class="cnt">后续加代码</span></h2>
 <table>
 <tr><th style="width:24%">方向</th><th>说明</th></tr>
-<tr><td>主公技体系</td><td>为刘备之外的汉主候选配专属号召技</td></tr>
-<tr><td>国战模式</td><td>去掉身份，按势力组队，武将势力即阵营</td></tr>
+<tr><td>主将被动体系</td><td>为汉主候选配专属常策（现有【昭烈】为手牌上限 +2）</td></tr>
+<tr><td>多模式复用</td><td>《会盟讨董》等模式只加 mode_effects 映射，不新增人设、不改技能文案</td></tr>
 <tr><td>宝物 / 坐骑扩展牌</td><td>赤兔马（吕布专属）、青囊书（华佗专属）</td></tr>
 <tr><td>体力流失机制</td><td>与"受到创伤"区分，用于【惊雷】、貂蝉【离间】等不触发反伤类应策的结算</td></tr>
 <tr><td>连营传导类计略</td><td>以陆逊【夷陵】为模板扩展多目标连锁牌</td></tr>
